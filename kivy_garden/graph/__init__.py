@@ -230,95 +230,96 @@ class Graph(Widget):
             self.canvas = canvas
 
     def _get_ticks(self, major, minor, log, s_min, s_max):
-        if major and s_max > s_min:
-            if log:
-                s_min = log10(s_min)
-                s_max = log10(s_max)
-                # count the decades in min - max. This is in actual decades,
-                # not logs.
-                n_decades = floor(s_max - s_min)
-                # for the fractional part of the last decade, we need to
-                # convert the log value, x, to 10**x but need to handle
-                # differently if the last incomplete decade has a decade
-                # boundary in it
-                if floor(s_min + n_decades) != floor(s_max):
-                    n_decades += 1 - (10 ** (s_min + n_decades + 1) - 10 **
-                                      s_max) / 10 ** floor(s_max + 1)
-                else:
-                    n_decades += ((10 ** s_max - 10 ** (s_min + n_decades)) /
-                                  10 ** floor(s_max + 1))
-                # this might be larger than what is needed, but we delete
-                # excess later
-                n_ticks_major = n_decades / float(major)
-                n_ticks = int(floor(n_ticks_major * (minor if minor >=
-                                                     1. else 1.0))) + 2
-                # in decade multiples, e.g. 0.1 of the decade, the distance
-                # between ticks
-                decade_dist = major / float(minor if minor else 1.0)
-
-                points_minor = [0] * n_ticks
-                points_major = [0] * n_ticks
-                k = 0  # position in points major
-                k2 = 0  # position in points minor
-                # because each decade is missing 0.1 of the decade, if a tick
-                # falls in < min_pos skip it
-                min_pos = 0.1 - 0.00001 * decade_dist
-                s_min_low = floor(s_min)
-                # first real tick location. value is in fractions of decades
-                # from the start we have to use decimals here, otherwise
-                # floating point inaccuracies results in bad values
-                start_dec = ceil((10 ** Decimal(s_min - s_min_low - 1)) /
-                                 Decimal(decade_dist)) * decade_dist
-                count_min = (0 if not minor else
-                             floor(start_dec / decade_dist) % minor)
-                start_dec += s_min_low
-                count = 0  # number of ticks we currently have passed start
-                while True:
-                    # this is the current position in decade that we are.
-                    # e.g. -0.9 means that we're at 0.1 of the 10**ceil(-0.9)
-                    # decade
-                    pos_dec = start_dec + decade_dist * count
-                    pos_dec_low = floor(pos_dec)
-                    diff = pos_dec - pos_dec_low
-                    zero = abs(diff) < 0.001 * decade_dist
-                    if zero:
-                        # the same value as pos_dec but in log scale
-                        pos_log = pos_dec_low
-                    else:
-                        pos_log = log10((pos_dec - pos_dec_low
-                                         ) * 10 ** ceil(pos_dec))
-                    if pos_log > s_max:
-                        break
-                    count += 1
-                    if zero or diff >= min_pos:
-                        if minor and not count_min % minor:
-                            points_major[k] = pos_log
-                            k += 1
-                        else:
-                            points_minor[k2] = pos_log
-                            k2 += 1
-                    count_min += 1
+        if log and s_max > s_min:
+            s_min = log10(s_min)
+            s_max = log10(s_max)
+            # count the decades in min - max. This is in actual decades,
+            # not logs.
+            n_decades = floor(s_max - s_min)
+            # for the fractional part of the last decade, we need to
+            # convert the log value, x, to 10**x but need to handle
+            # differently if the last incomplete decade has a decade
+            # boundary in it
+            if floor(s_min + n_decades) != floor(s_max):
+                n_decades += 1 - (10 ** (s_min + n_decades + 1) - 10 **
+                                  s_max) / 10 ** floor(s_max + 1)
             else:
-                # distance between each tick
-                tick_dist = major / float(minor if minor else 1.0)
-                n_ticks = int(floor((s_max - s_min) / tick_dist) + 1)
-                points_major = [0] * int(floor((s_max - s_min) / float(major))
-                                         + 1)
-                points_minor = [0] * (n_ticks - len(points_major) + 1)
-                k = 0  # position in points major
-                k2 = 0  # position in points minor
-                for m in range(0, n_ticks):
-                    if minor and m % minor:
-                        points_minor[k2] = m * tick_dist + s_min
-                        k2 += 1
-                    else:
-                        points_major[k] = m * tick_dist + s_min
+                n_decades += ((10 ** s_max - 10 ** (s_min + n_decades)) /
+                              10 ** floor(s_max + 1))
+            # this might be larger than what is needed, but we delete
+            # excess later
+            n_ticks_major = n_decades / float(major)
+            n_ticks = int(floor(n_ticks_major * (minor if minor >=
+                                                 1. else 1.0))) + 2
+            # in decade multiples, e.g. 0.1 of the decade, the distance
+            # between ticks
+            decade_dist = major / float(minor if minor else 1.0)
+
+            points_minor = [0] * n_ticks
+            points_major = [0] * n_ticks
+            k = 0  # position in points major
+            k2 = 0  # position in points minor
+            # because each decade is missing 0.1 of the decade, if a tick
+            # falls in < min_pos skip it
+            min_pos = 0.1 - 0.00001 * decade_dist
+            s_min_low = floor(s_min)
+            # first real tick location. value is in fractions of decades
+            # from the start we have to use decimals here, otherwise
+            # floating point inaccuracies results in bad values
+            start_dec = ceil((10 ** Decimal(s_min - s_min_low - 1)) /
+                             Decimal(decade_dist)) * decade_dist
+            count_min = (0 if not minor else
+                         floor(start_dec / decade_dist) % minor)
+            start_dec += s_min_low
+            count = 0  # number of ticks we currently have passed start
+            while True:
+                # this is the current position in decade that we are.
+                # e.g. -0.9 means that we're at 0.1 of the 10**ceil(-0.9)
+                # decade
+                pos_dec = start_dec + decade_dist * count
+                pos_dec_low = floor(pos_dec)
+                diff = pos_dec - pos_dec_low
+                zero = abs(diff) < 0.001 * decade_dist
+                if zero:
+                    # the same value as pos_dec but in log scale
+                    pos_log = pos_dec_low
+                else:
+                    pos_log = log10((pos_dec - pos_dec_low
+                                     ) * 10 ** ceil(pos_dec))
+                if pos_log > s_max:
+                    break
+                count += 1
+                if zero or diff >= min_pos:
+                    if minor and not count_min % minor:
+                        points_major[k] = pos_log
                         k += 1
-            del points_major[k:]
-            del points_minor[k2:]
+                    else:
+                        points_minor[k2] = pos_log
+                        k2 += 1
+                count_min += 1
+        elif not log and s_max != s_min:
+            # distance between each tick
+            tick_dist = major / float(minor if minor else 1.0)
+            n_ticks = int(floor(abs((s_max - s_min) / tick_dist)) + 1)
+            tick_dist = abs(tick_dist) * (1 if s_min < s_max else -1)
+            points_major = [0] * int(floor(abs((s_max - s_min) / float(major)))
+                                     + 1)
+            points_minor = [0] * (n_ticks - len(points_major) + 1)
+            k = 0  # position in points major
+            k2 = 0  # position in points minor
+            for m in range(0, n_ticks):
+                if minor and m % minor:
+                    points_minor[k2] = m * tick_dist + s_min
+                    k2 += 1
+                else:
+                    points_major[k] = m * tick_dist + s_min
+                    k += 1
         else:
+            k = k2 = 1
             points_major = []
             points_minor = []
+        del points_major[k:]
+        del points_minor[k2:]
         return points_major, points_minor
 
     def _update_labels(self):
@@ -767,12 +768,15 @@ class Graph(Widget):
     '''The x-axis minimum value.
 
     If :data:`xlog` is True, xmin must be larger than zero.
+    If :data:`xmax` < :data:`xmin`, the x axis will be displayed reversed.
 
     :data:`xmin` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
     '''
 
     xmax = NumericProperty(100.)
-    '''The x-axis maximum value, larger than xmin.
+    '''The x-axis maximum value.
+    
+    If :data:`xmax` < :data:`xmin`, the x axis will be displayed reversed.
 
     :data:`xmax` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
     '''
@@ -860,12 +864,15 @@ class Graph(Widget):
     '''The y-axis minimum value.
 
     If :data:`ylog` is True, ymin must be larger than zero.
+    If :data:`ymax` < :data:`ymin`, the y axis will be displayed reversed.
 
     :data:`ymin` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
     '''
 
     ymax = NumericProperty(100.)
-    '''The y-axis maximum value, larger than ymin.
+    '''The y-axis maximum value.
+    
+    If :data:`ymax` < :data:`ymin`, the y axis will be displayed reversed.
 
     :data:`ymax` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
     '''
