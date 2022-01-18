@@ -53,6 +53,8 @@ The current availables plots are:
 __all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'LinePlot',
            'SmoothLinePlot', 'ContourPlot', 'ScatterPlot', 'PointPlot')
 
+from typing import Union, Callable, List, Tuple
+
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.stencilview import StencilView
@@ -364,7 +366,11 @@ class Graph(Widget):
             # horizontal size of the largest tick label, to have enough room
             funcexp = exp10 if self.ylog else identity
             funclog = log10 if self.ylog else identity
-            ylabels[0].text = precision % funcexp(ypoints[0])
+            get_text = \
+                (lambda _k: self.y_grid_label(funcexp(ypoints[_k]))) if isinstance(self.y_grid_label, Callable) else \
+                self.y_grid_label.__getitem__ if isinstance(self.y_grid_label, (tuple, list, str)) else \
+                lambda _k: precision % funcexp(ypoints[_k])
+            ylabels[0].text = get_text(0)
             ylabels[0].texture_update()
             y1 = ylabels[0].texture_size
             y_start = y_next + (padding + y1[1] if len(xlabels) and xlabel_grid
@@ -377,7 +383,7 @@ class Graph(Widget):
             y_start -= y1[1] / 2.
             y1 = y1[0]
             for k in range(len(ylabels)):
-                ylabels[k].text = precision % funcexp(ypoints[k])
+                ylabels[k].text = get_text(k)
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
@@ -391,20 +397,24 @@ class Graph(Widget):
         if len(xlabels) and xlabel_grid:
             funcexp = exp10 if self.xlog else identity
             funclog = log10 if self.xlog else identity
+            get_text = \
+                (lambda _k: self.x_grid_label(funcexp(xpoints[_k]))) if isinstance(self.x_grid_label, Callable) else \
+                self.x_grid_label.__getitem__ if isinstance(self.x_grid_label, (tuple, list, str)) else \
+                lambda _k: precision % funcexp(xpoints[_k])
             # find the distance from the end that'll fit the last tick label
-            xlabels[0].text = precision % funcexp(xpoints[-1])
+            xlabels[0].text = get_text(-1)
             xlabels[0].texture_update()
             xextent = x + width - xlabels[0].texture_size[0] / 2. - padding
             # find the distance from the start that'll fit the first tick label
             if not x_next:
-                xlabels[0].text = precision % funcexp(xpoints[0])
+                xlabels[0].text = get_text(0)
                 xlabels[0].texture_update()
                 x_next = padding + xlabels[0].texture_size[0] / 2.
             xmin = funclog(xmin)
             ratio = (xextent - x_next) / float(funclog(self.xmax) - xmin)
             right = -1
             for k in range(len(xlabels)):
-                xlabels[k].text = precision % funcexp(xpoints[k])
+                xlabels[k].text = get_text(k)
                 # update the size so we can center the labels on ticks
                 xlabels[k].texture_update()
                 xlabels[k].size = xlabels[k].texture_size
@@ -595,6 +605,8 @@ class Graph(Widget):
 
         if not self.x_grid_label:
             n_labels = 0
+        elif isinstance(self.x_grid_label, (tuple, list, str)):
+            n_labels = min(len(xpoints_major), len(self.x_grid_label))
         else:
             n_labels = len(xpoints_major)
 
@@ -638,6 +650,8 @@ class Graph(Widget):
 
         if not self.y_grid_label:
             n_labels = 0
+        elif isinstance(self.y_grid_label, (tuple, list, str)):
+            n_labels = min(len(ypoints_major), len(self.y_grid_label))
         else:
             n_labels = len(ypoints_major)
 
@@ -840,11 +854,17 @@ class Graph(Widget):
     to False.
     '''
 
-    x_grid_label = BooleanProperty(False)
-    '''Whether labels should be displayed beneath each major tick. If true,
-    each major tick will have a label containing the axis value.
+    x_grid_label: Union[bool, Callable[[float], str], List[str], Tuple[str, ...], str] \
+        = ObjectProperty(False)
+    '''Whether and how labels should be displayed beneath each major tick.
+    
+    If false, no tick labels are shown.
+    If true, each major tick will have a label containing the axis value displayed at precision :data:`precision`.
+    It can also be a callable returning the string representation for a given float value.
+    It can also be a list or tuple of strings or a string itself. In that case the k-th item will be displayed at the
+    k-th major label.
 
-    :data:`x_grid_label` is a :class:`~kivy.properties.BooleanProperty`,
+    :data:`x_grid_label` is a :class:`~kivy.properties.ObjectProperty`,
     defaults to False.
     '''
 
@@ -901,11 +921,17 @@ class Graph(Widget):
     to False.
     '''
 
-    y_grid_label = BooleanProperty(False)
-    '''Whether labels should be displayed beneath each major tick. If true,
-    each major tick will have a label containing the axis value.
+    y_grid_label: Union[bool, Callable[[float], str], List[str], Tuple[str, ...], str] \
+        = ObjectProperty(False)
+    '''Whether and how labels should be displayed beneath each major tick.
+    
+    If false, no tick labels are shown.
+    If true, each major tick will have a label containing the axis value displayed at precision :data:`precision`.
+    It can also be a callable returning the string representation for a given float value.
+    It can also be a list or tuple of strings or a string itself. In that case the k-th item will be displayed at the
+    k-th major label.
 
-    :data:`y_grid_label` is a :class:`~kivy.properties.BooleanProperty`,
+    :data:`y_grid_label` is a :class:`~kivy.properties.ObjectProperty`,
     defaults to False.
     '''
 
