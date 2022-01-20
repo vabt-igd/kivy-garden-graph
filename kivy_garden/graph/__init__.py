@@ -230,7 +230,16 @@ class Graph(Widget):
             self.canvas = canvas
 
     def _get_ticks(self, major, minor, log, s_min, s_max):
-        if major and s_max > s_min:
+        if isinstance(major, (list, tuple)) != isinstance(minor, (list, tuple)):
+            minor = type(major)()
+        if isinstance(major, (list, tuple)):
+            points_major = [p for p in major if s_min <= p <= s_max or s_min >= p >= s_max]
+            points_minor = [p for p in minor if (s_min <= p <= s_max or s_min >= p >= s_max) and p not in points_major]
+            if log:
+                points_major = [log10(p) for p in points_major]
+                points_minor = [log10(p) for p in points_minor]
+        elif major > 0 and s_max > s_min:
+            minor = max(minor, 0)
             if log:
                 s_min = log10(s_min)
                 s_max = log10(s_max)
@@ -785,13 +794,18 @@ class Graph(Widget):
     to False.
     '''
 
-    x_ticks_major = BoundedNumericProperty(0, min=0)
-    '''Distance between major tick marks on the x-axis.
+    x_ticks_major = ObjectProperty(0)
+    '''Positioning of major tick marks on the x-axis.
 
-    Determines the distance between the major tick marks. Major tick marks
+    May either be a numerical value indicating the distance between ticks
+    or a list or tuple giving the absolute tick positions.
+
+    If :data:`x_ticks_major` is a numeric value greater than zero, it
+    determines the distance between the major tick marks. Major tick marks
     start from min and re-occur at every ticks_major until :data:`xmax`.
     If :data:`xmax` doesn't overlap with a integer multiple of ticks_major,
-    no tick will occur at :data:`xmax`. Zero indicates no tick marks.
+    no tick will occur at :data:`xmax`. Values below or equal to zero
+    indicate no tick marks.
 
     If :data:`xlog` is true, then this indicates the distance between ticks
     in multiples of current decade. E.g. if :data:`xmin` is 0.1 and
@@ -803,16 +817,25 @@ class Graph(Widget):
     1.5, there will be ticks at 0.1, 5, 100, 5,000... Also notice, that there's
     always a major tick at the start. Finally, if e.g. :data:`xmin` is 0.6
     and this 0.5 there will be ticks at 0.6, 1, 5...
+    
+    If :data:`x_ticks_major` is a list or tuple, a major tick will be displayed
+    at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_major` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
-    x_ticks_minor = BoundedNumericProperty(0, min=0)
-    '''The number of sub-intervals that divide x_ticks_major.
+    x_ticks_minor = ObjectProperty(0)
+    '''Positioning of minor tick marks on the x-axis.
 
-    Determines the number of sub-intervals into which ticks_major is divided,
-    if non-zero. The actual number of minor ticks between the major ticks is
+    May either be a numerical value indicating the number of subintervals
+    between major ticks or a list or tuple giving the absolute tick positions.
+    If either one of :data:`x_ticks_minor` and :data:`x_ticks_major` is a
+    numerical value and the other one is not, :data:`x_ticks_minor` is ignored.
+    
+    If :data:`x_ticks_major` is a numerical value greater than zero, it
+    determines the number of sub-intervals into which ticks_major is divided.
+    The actual number of minor ticks between the major ticks is
     ticks_minor - 1. Only used if ticks_major is non-zero. If there's no major
     tick at xmax then the number of minor ticks after the last major
     tick will be however many ticks fit until xmax.
@@ -824,9 +847,12 @@ class Graph(Widget):
     ticks_major is 0.3, ticks will occur at 0.1, 0.12, 0.15, 0.18... Finally,
     as is common, if ticks major is 1, and ticks minor is 5, there will be
     ticks at 0.1, 0.2, 0.4... 0.8, 1, 2...
+    
+    If :data:`x_ticks_minor` is a list or tuple, a minor tick will be displayed
+    at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_minor` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
     x_grid = BooleanProperty(False)
@@ -878,19 +904,20 @@ class Graph(Widget):
     to False.
     '''
 
-    y_ticks_major = BoundedNumericProperty(0, min=0)
-    '''Distance between major tick marks. See :data:`x_ticks_major`.
+    y_ticks_major = ObjectProperty(0)
+    '''Positioning of major tick marks on the y-axis.
+    See :data:`x_ticks_major`.
 
     :data:`y_ticks_major` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
-    y_ticks_minor = BoundedNumericProperty(0, min=0)
-    '''The number of sub-intervals that divide ticks_major.
+    y_ticks_minor = ObjectProperty(0)
+    '''Positioning of minor tick marks on the y-axis.
     See :data:`x_ticks_minor`.
 
     :data:`y_ticks_minor` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
     y_grid = BooleanProperty(False)
