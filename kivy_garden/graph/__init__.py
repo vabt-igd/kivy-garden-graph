@@ -56,9 +56,9 @@ __all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'LinePlot',
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.stencilview import StencilView
-from kivy.properties import NumericProperty, BooleanProperty,\
-    BoundedNumericProperty, StringProperty, ListProperty, ObjectProperty,\
-    DictProperty, AliasProperty
+from kivy.properties import NumericProperty, BooleanProperty, \
+    BoundedNumericProperty, StringProperty, ListProperty, ObjectProperty, \
+    DictProperty, AliasProperty, ColorProperty
 from kivy.clock import Clock
 from kivy.graphics import Mesh, Color, Rectangle, Point
 from kivy.graphics import Fbo
@@ -995,7 +995,7 @@ class Plot(EventDispatcher):
                            'ylog': False, 'ymin': 0, 'ymax': 100,
                            'size': (0, 0, 0, 0)})
 
-    color = ListProperty([1, 1, 1, 1])
+    color = ColorProperty([1, 1, 1, 1])
     '''Color of the plot.
     '''
 
