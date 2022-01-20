@@ -232,97 +232,108 @@ class Graph(Widget):
             self.canvas = canvas
 
     def _get_ticks(self, major, minor, log, s_min, s_max):
-        if log and s_max > s_min:
-            s_min = log10(s_min)
-            s_max = log10(s_max)
-            # count the decades in min - max. This is in actual decades,
-            # not logs.
-            n_decades = floor(s_max - s_min)
-            # for the fractional part of the last decade, we need to
-            # convert the log value, x, to 10**x but need to handle
-            # differently if the last incomplete decade has a decade
-            # boundary in it
-            if floor(s_min + n_decades) != floor(s_max):
-                n_decades += 1 - (10 ** (s_min + n_decades + 1) - 10 **
-                                  s_max) / 10 ** floor(s_max + 1)
-            else:
-                n_decades += ((10 ** s_max - 10 ** (s_min + n_decades)) /
-                              10 ** floor(s_max + 1))
-            # this might be larger than what is needed, but we delete
-            # excess later
-            n_ticks_major = n_decades / float(major)
-            n_ticks = int(floor(n_ticks_major * (minor if minor >=
-                                                 1. else 1.0))) + 2
-            # in decade multiples, e.g. 0.1 of the decade, the distance
-            # between ticks
-            decade_dist = major / float(minor if minor else 1.0)
+        if isinstance(major, (list, tuple)) != isinstance(minor, (list, tuple)):
+            minor = type(major)()
+        if isinstance(major, (list, tuple)):
+            points_major = [p for p in major if s_min <= p <= s_max or s_min >= p >= s_max]
+            points_minor = [p for p in minor if (s_min <= p <= s_max or s_min >= p >= s_max) and p not in points_major]
+            if log:
+                points_major = [log10(p) for p in points_major]
+                points_minor = [log10(p) for p in points_minor]
+        elif major > 0:
+            minor = max(minor, 0)
+            if log and s_max > s_min:
+                s_min = log10(s_min)
+                s_max = log10(s_max)
+                # count the decades in min - max. This is in actual decades,
+                # not logs.
+                n_decades = floor(s_max - s_min)
+                # for the fractional part of the last decade, we need to
+                # convert the log value, x, to 10**x but need to handle
+                # differently if the last incomplete decade has a decade
+                # boundary in it
+                if floor(s_min + n_decades) != floor(s_max):
+                    n_decades += 1 - (10 ** (s_min + n_decades + 1) - 10 **
+                                      s_max) / 10 ** floor(s_max + 1)
+                else:
+                    n_decades += ((10 ** s_max - 10 ** (s_min + n_decades)) /
+                                  10 ** floor(s_max + 1))
+                # this might be larger than what is needed, but we delete
+                # excess later
+                n_ticks_major = n_decades / float(major)
+                n_ticks = int(floor(n_ticks_major * (minor if minor >=
+                                                     1. else 1.0))) + 2
+                # in decade multiples, e.g. 0.1 of the decade, the distance
+                # between ticks
+                decade_dist = major / float(minor if minor else 1.0)
 
-            points_minor = [0] * n_ticks
-            points_major = [0] * n_ticks
-            k = 0  # position in points major
-            k2 = 0  # position in points minor
-            # because each decade is missing 0.1 of the decade, if a tick
-            # falls in < min_pos skip it
-            min_pos = 0.1 - 0.00001 * decade_dist
-            s_min_low = floor(s_min)
-            # first real tick location. value is in fractions of decades
-            # from the start we have to use decimals here, otherwise
-            # floating point inaccuracies results in bad values
-            start_dec = ceil((10 ** Decimal(s_min - s_min_low - 1)) /
-                             Decimal(decade_dist)) * decade_dist
-            count_min = (0 if not minor else
-                         floor(start_dec / decade_dist) % minor)
-            start_dec += s_min_low
-            count = 0  # number of ticks we currently have passed start
-            while True:
-                # this is the current position in decade that we are.
-                # e.g. -0.9 means that we're at 0.1 of the 10**ceil(-0.9)
-                # decade
-                pos_dec = start_dec + decade_dist * count
-                pos_dec_low = floor(pos_dec)
-                diff = pos_dec - pos_dec_low
-                zero = abs(diff) < 0.001 * decade_dist
-                if zero:
-                    # the same value as pos_dec but in log scale
-                    pos_log = pos_dec_low
-                else:
-                    pos_log = log10((pos_dec - pos_dec_low
-                                     ) * 10 ** ceil(pos_dec))
-                if pos_log > s_max:
-                    break
-                count += 1
-                if zero or diff >= min_pos:
-                    if minor and not count_min % minor:
-                        points_major[k] = pos_log
-                        k += 1
+                points_minor = [0] * n_ticks
+                points_major = [0] * n_ticks
+                k = 0  # position in points major
+                k2 = 0  # position in points minor
+                # because each decade is missing 0.1 of the decade, if a tick
+                # falls in < min_pos skip it
+                min_pos = 0.1 - 0.00001 * decade_dist
+                s_min_low = floor(s_min)
+                # first real tick location. value is in fractions of decades
+                # from the start we have to use decimals here, otherwise
+                # floating point inaccuracies results in bad values
+                start_dec = ceil((10 ** Decimal(s_min - s_min_low - 1)) /
+                                 Decimal(decade_dist)) * decade_dist
+                count_min = (0 if not minor else
+                             floor(start_dec / decade_dist) % minor)
+                start_dec += s_min_low
+                count = 0  # number of ticks we currently have passed start
+                while True:
+                    # this is the current position in decade that we are.
+                    # e.g. -0.9 means that we're at 0.1 of the 10**ceil(-0.9)
+                    # decade
+                    pos_dec = start_dec + decade_dist * count
+                    pos_dec_low = floor(pos_dec)
+                    diff = pos_dec - pos_dec_low
+                    zero = abs(diff) < 0.001 * decade_dist
+                    if zero:
+                        # the same value as pos_dec but in log scale
+                        pos_log = pos_dec_low
                     else:
-                        points_minor[k2] = pos_log
+                        pos_log = log10((pos_dec - pos_dec_low
+                                         ) * 10 ** ceil(pos_dec))
+                    if pos_log > s_max:
+                        break
+                    count += 1
+                    if zero or diff >= min_pos:
+                        if minor and not count_min % minor:
+                            points_major[k] = pos_log
+                            k += 1
+                        else:
+                            points_minor[k2] = pos_log
+                            k2 += 1
+                    count_min += 1
+            elif not log and s_max != s_min:
+                # distance between each tick
+                tick_dist = major / float(minor if minor else 1.0)
+                n_ticks = int(floor(abs((s_max - s_min) / tick_dist)) + 1)
+                tick_dist = abs(tick_dist) * (1 if s_min < s_max else -1)
+                points_major = [0] * int(floor(abs((s_max - s_min) / float(major)))
+                                         + 1)
+                points_minor = [0] * (n_ticks - len(points_major) + 1)
+                k = 0  # position in points major
+                k2 = 0  # position in points minor
+                for m in range(0, n_ticks):
+                    if minor and m % minor:
+                        points_minor[k2] = m * tick_dist + s_min
                         k2 += 1
-                count_min += 1
-        elif not log and s_max != s_min:
-            # distance between each tick
-            tick_dist = major / float(minor if minor else 1.0)
-            n_ticks = int(floor(abs((s_max - s_min) / tick_dist)) + 1)
-            tick_dist = abs(tick_dist) * (1 if s_min < s_max else -1)
-            points_major = [0] * int(floor(abs((s_max - s_min) / float(major)))
-                                     + 1)
-            points_minor = [0] * (n_ticks - len(points_major) + 1)
-            k = 0  # position in points major
-            k2 = 0  # position in points minor
-            for m in range(0, n_ticks):
-                if minor and m % minor:
-                    points_minor[k2] = m * tick_dist + s_min
-                    k2 += 1
-                else:
-                    points_major[k] = m * tick_dist + s_min
-                    k += 1
-        else:
-            k = k2 = 1
-            points_major = []
-            points_minor = []
-        del points_major[k:]
-        del points_minor[k2:]
-        return points_major, points_minor
+                    else:
+                        points_major[k] = m * tick_dist + s_min
+                        k += 1
+            else:
+                k = k2 = 1
+                points_major = []
+                points_minor = []
+            del points_major[k:]
+            del points_minor[k2:]
+        return sorted(points_major, reverse=s_min > s_max),\
+               sorted(points_minor, reverse=s_min > s_max)
 
     def _update_labels(self):
         xlabel = self._xlabel
@@ -803,13 +814,18 @@ class Graph(Widget):
     to False.
     '''
 
-    x_ticks_major = BoundedNumericProperty(0, min=0)
-    '''Distance between major tick marks on the x-axis.
+    x_ticks_major = ObjectProperty(0)
+    '''Positioning of major tick marks on the x-axis.
 
-    Determines the distance between the major tick marks. Major tick marks
+    May either be a numerical value indicating the distance between ticks
+    or a list or tuple giving the absolute tick positions.
+
+    If :data:`x_ticks_major` is a numeric value greater than zero, it
+    determines the distance between the major tick marks. Major tick marks
     start from min and re-occur at every ticks_major until :data:`xmax`.
     If :data:`xmax` doesn't overlap with a integer multiple of ticks_major,
-    no tick will occur at :data:`xmax`. Zero indicates no tick marks.
+    no tick will occur at :data:`xmax`. Values below or equal to zero
+    indicate no tick marks.
 
     If :data:`xlog` is true, then this indicates the distance between ticks
     in multiples of current decade. E.g. if :data:`xmin` is 0.1 and
@@ -821,16 +837,25 @@ class Graph(Widget):
     1.5, there will be ticks at 0.1, 5, 100, 5,000... Also notice, that there's
     always a major tick at the start. Finally, if e.g. :data:`xmin` is 0.6
     and this 0.5 there will be ticks at 0.6, 1, 5...
+    
+    If :data:`x_ticks_major` is a list or tuple, a major tick will be displayed
+    at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_major` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
-    x_ticks_minor = BoundedNumericProperty(0, min=0)
-    '''The number of sub-intervals that divide x_ticks_major.
+    x_ticks_minor = ObjectProperty(0)
+    '''Positioning of minor tick marks on the x-axis.
 
-    Determines the number of sub-intervals into which ticks_major is divided,
-    if non-zero. The actual number of minor ticks between the major ticks is
+    May either be a numerical value indicating the number of subintervals
+    between major ticks or a list or tuple giving the absolute tick positions.
+    If either one of :data:`x_ticks_minor` and :data:`x_ticks_major` is a
+    numerical value and the other one is not, :data:`x_ticks_minor` is ignored.
+    
+    If :data:`x_ticks_major` is a numerical value greater than zero, it
+    determines the number of sub-intervals into which ticks_major is divided.
+    The actual number of minor ticks between the major ticks is
     ticks_minor - 1. Only used if ticks_major is non-zero. If there's no major
     tick at xmax then the number of minor ticks after the last major
     tick will be however many ticks fit until xmax.
@@ -842,9 +867,12 @@ class Graph(Widget):
     ticks_major is 0.3, ticks will occur at 0.1, 0.12, 0.15, 0.18... Finally,
     as is common, if ticks major is 1, and ticks minor is 5, there will be
     ticks at 0.1, 0.2, 0.4... 0.8, 1, 2...
+    
+    If :data:`x_ticks_minor` is a list or tuple, a minor tick will be displayed
+    at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_minor` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
     x_grid = BooleanProperty(False)
@@ -905,19 +933,20 @@ class Graph(Widget):
     to False.
     '''
 
-    y_ticks_major = BoundedNumericProperty(0, min=0)
-    '''Distance between major tick marks. See :data:`x_ticks_major`.
+    y_ticks_major = ObjectProperty(0)
+    '''Positioning of major tick marks on the y-axis.
+    See :data:`x_ticks_major`.
 
     :data:`y_ticks_major` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
-    y_ticks_minor = BoundedNumericProperty(0, min=0)
-    '''The number of sub-intervals that divide ticks_major.
+    y_ticks_minor = ObjectProperty(0)
+    '''Positioning of minor tick marks on the y-axis.
     See :data:`x_ticks_minor`.
 
     :data:`y_ticks_minor` is a
-    :class:`~kivy.properties.BoundedNumericProperty`, defaults to 0.
+    :class:`~kivy.properties.ObjectProperty`, defaults to 0.
     '''
 
     y_grid = BooleanProperty(False)
