@@ -1669,7 +1669,7 @@ class LineAndMarkerPlot(Plot):
     and defaults to None.
     """
 
-    marker_size: float = BoundedNumericProperty(dp(12), min)
+    marker_size: float = BoundedNumericProperty(dp(12), min=0)
     """Size of a single marker as the side length of a surrounding square.
     
     For markers, that are drawn as a line, e. g. 'o' or 's' markers, the actual
