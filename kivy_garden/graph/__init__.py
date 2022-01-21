@@ -51,17 +51,21 @@ The current availables plots are:
 '''
 
 __all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'LinePlot',
-           'SmoothLinePlot', 'ContourPlot', 'ScatterPlot', 'PointPlot')
+           'SmoothLinePlot', 'ContourPlot', 'ScatterPlot', 'PointPlot',
+           'LineAndMarkerPlot')
 
-from typing import Tuple, Any, Union, Callable, List
+from typing import Optional, List, Tuple, Any, Callable, Union
 
+from kivy.graphics.instructions import InstructionGroup, Instruction
+from kivy.graphics.vertex_instructions import Line, SmoothLine, Ellipse
 from kivy.metrics import dp
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.stencilview import StencilView
 from kivy.properties import NumericProperty, BooleanProperty, \
     BoundedNumericProperty, StringProperty, ListProperty, ObjectProperty, \
-    DictProperty, AliasProperty, ReferenceListProperty
+    DictProperty, AliasProperty, ReferenceListProperty, ColorProperty, \
+    OptionProperty
 from kivy.clock import Clock
 from kivy.graphics import Mesh, Color, Rectangle, Point
 from kivy.graphics import Fbo
@@ -70,7 +74,7 @@ from kivy.event import EventDispatcher
 from kivy.lang import Builder
 from kivy.logger import Logger
 from kivy import metrics
-from math import log10, floor, ceil
+from math import log10, floor, ceil, sqrt
 from decimal import Decimal
 from itertools import chain
 try:
@@ -1206,7 +1210,7 @@ class Plot(EventDispatcher):
                            'ylog': False, 'ymin': 0, 'ymax': 100,
                            'size': (0, 0, 0, 0)})
 
-    color = ListProperty([1, 1, 1, 1])
+    color = ColorProperty([1, 1, 1, 1])
     '''Color of the plot.
     '''
 
@@ -1945,6 +1949,265 @@ class PointPlot(Plot):
         self._maximum_legend_point_size = min(maximum_size) / 2
         self._point_legend.pointsize = min(self._maximum_legend_point_size, self.point_size)
         self._point_legend.points = center
+
+
+class LineAndMarkerPlot(Plot):
+    """A Plot consisting of a line and markers.
+
+    The line is drawn using a :class:`kivy.graphics.SmoothLine` and can
+    be adapted using the :data:`line_width` and :data:`color` properties.
+
+    The markers can be adapted using the :data:`marker_shape`,
+    :data:`marker_line_width`, :data:`marker_color` properties.
+    """
+
+    marker_shape: str = OptionProperty(None, allownone=True, options=[None, *'x+*-|<>v^osdOSD'])
+    """The shape of the marker.
+    
+    The following values are allowed:
+        None:   no marker
+        'x':    cross
+        '+':    plus sign
+        '*':    asterisk
+        '-':    horizontal line
+        '|':    vertical line
+        '<':    left-pointing open triangle
+        '>':    right-pointing open triangle
+        'v':    downward-pointing open triangle
+        '^':    upward-pointing open triangle
+        'o':    circle
+        's':    square
+        'd':    diamond
+        'O':    filled circle
+        'S':    filled square
+        'D':    filled diamond
+    
+    :data:`marker_shape` is a :class:`kivy.properties.OptionProperty`
+    and defaults to None.
+    """
+
+    marker_size: float = BoundedNumericProperty(dp(12), min=0)
+    """Size of a single marker as the side length of a surrounding square.
+    
+    For markers, that are drawn as a line, e. g. 'o' or 's' markers, the actual
+    outermost size will be :data:`marker_size` + 2 * :data:`marker_line_width`, because
+    half the line will exceed the square defined by marker_size * marker_size.
+    
+    :data:`marker_size` is a :class:`kivy.properties.BoundedNumericProperty`
+    with a minimum of 0 and defaults to 12 dp.
+    """
+
+    marker_line_width: float = BoundedNumericProperty(dp(1.5), min=0)
+    """The line width with which the markers are drawn.
+    
+    For filled markers this value is ignored.
+    
+    :data:`marker_line_width` is a :class:`kivy.properties.BoundedNumericProperty`
+    with a minimum of 0 and defaults to 1.5 dp.
+    """
+
+    line_width: float = BoundedNumericProperty(dp(1.1), min=0)
+    """Line width of the line connecting the markers.
+    
+    :data:`line_width` is a :class:`kivy.properties.BoundedNumericProperty`
+    with a minimum of 0 and defaults to 1.1 dp.
+    """
+
+    marker_color = ColorProperty(None, allownone=True)
+    """Color of the markers.
+    
+    May be set to None, in which case the markers are drawn with the same
+    color as the line, i. e. the color defines by :data:`color`.
+    
+    :data:`marker_color` is a :class:`kivy.properties.ColorProperty`
+    and defaults to None.
+    """
+
+    def __init__(self, **kwargs):
+
+        # The following are set in self.create_drawings.
+        self._color: Optional[Color] = None  # color drawing instruction
+        self._marker_color: Optional[Color] = None  # marker_color drawing instruction
+        self._line: Optional[Line] = None  # drawing instruction for the line connecting the markers
+        # instruction group holding drawing instructions for the single markers
+        self._marker_group: Optional[InstructionGroup] = None
+
+        # instruction group holding drawing instructions for legend.
+        self._legend_group: Optional[InstructionGroup] = None
+        self._legend_line: Optional[Line] = None
+        self._legend_marker: Optional[Instruction] = None
+        # store legend marker center and max size
+        self._legend_marker_center: Optional[Tuple[float, float]] = None
+        self._legend_maximum_drawing_size: Optional[Tuple[float, float]] = None
+
+        # list of drawing instructions for the plot markers
+        self._markers: List[Instruction] = []
+
+        # call super
+        super().__init__(**kwargs)
+
+        # In the following we do all the bindings so that the plot is always up to date.
+
+        def update_marker_line_width(*_):
+            for p in self._markers:
+                if isinstance(p, Line):
+                    p.width = self.marker_line_width
+            if isinstance(self._legend_marker, Line):
+                self._legend_marker.width = self.marker_line_width
+        self.fbind('marker_line_width', update_marker_line_width)
+
+        def update_line_width(*_):
+            self._line.width = self.line_width
+            if self._legend_line:
+                self._legend_line.width = min(self.line_width, self._legend_maximum_drawing_size[1] / 2)
+        self.fbind('line_width', update_line_width)
+
+        # When the marker size changes, the endpoints of the marker lines change, so redraw.
+        self.fbind('marker_size', lambda *_: self.draw_markers())
+        self.fbind('marker_size', lambda *_: self.draw_legend())
+        # When the shape of the markers changes, the Marker Line class may change, so create markers new and draw them.
+        self.fbind('marker_shape', lambda *_: self.draw_markers(force_new=True))
+        self.fbind('marker_shape', lambda *_: self.draw_legend(force_new=True))
+
+        def update_color(*_):
+            if self._color:
+                self._color.rgba = self.color
+                self._marker_color.rgba = self.marker_color or self.color
+        self.fbind('color', update_color)
+        self.fbind('marker_color', update_color)
+
+    def create_drawings(self):
+        # superclass method
+        self._color = Color(*self.color)
+        self._line = SmoothLine(width=self.line_width)
+        self._marker_color = Color(*(self.marker_color or self.color))
+        self._marker_group = InstructionGroup()
+        return [self._color, self._line, self._marker_color, self._marker_group]
+
+    def draw(self, *_):
+        # call superclass method
+        super().draw()
+        # Set the line's points.
+        # They have to be simplified (see method's doc).
+        # They need another format: [(x0, y0), (x1, y1), ...] -> [x0, y0, x1, y1, ...]
+        self._line.points = [xy for p in self.simplify_points(list(self.iterate_points())) for xy in p]
+        # Update all the markers of the plot.
+        self.draw_markers()
+
+    def get_marker(self):
+        # This method returns a single marker.
+        # We want to use SmoothLine in most cases,
+        # but for some shapes we cannot use
+        # simplify_points, since the line crosses itself.
+        # So SmoothLine Does not work and we fall back to Line.
+        shape = self.marker_shape
+        if shape is None:
+            return Instruction()
+        if shape in 'x+*':
+            return Line(width=self.marker_line_width)
+        if shape in '-|<>v^sd':
+            return Line(width=self.marker_line_width, joint='miter')
+        if shape in 'o':
+            return SmoothLine(width=self.marker_line_width, close=True, joint='round')
+        if shape == 'O':
+            return Ellipse()
+        if shape == 'S':
+            return Rectangle()
+        if shape == 'D':
+            return Mesh(indices=(0, 1, 2, 3), mode='triangle_fan')
+        raise NotImplementedError()
+
+    def draw_markers(self, force_new=False):
+
+        super().draw()
+
+        # Delete unneccessary markers.
+        while len(self.points) < len(self._markers) or (force_new and self._markers):
+            self._marker_group.remove(self._markers.pop())
+
+        # While we have less markers than needed, instantiate new ones.
+        while len(self.points) > len(self._markers):
+            # Keep references in self._markers, to change their position and shape.
+            self._markers.append(self.get_marker())
+            # Each marker is a drawing instruction that needs to be added to the correct InstructionGroup
+            # in order to be displayed.
+            self._marker_group.add(self._markers[-1])
+
+        for marker, point in zip(self._markers, self.iterate_points()):
+            self.draw_marker(marker, self.marker_size, *point)
+
+    @staticmethod
+    def simplify_points(points: List[Tuple[float, float]]):
+        """Delete points in a list that lie exactly on the line connecting it's two adjacent points.
+
+        This is needed due to a bug in class´SmoothLine´.
+        """
+        points = points.copy()
+        i = 0
+        while len(points) > i + 2:
+            if 1e-5 > abs((points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]) -
+                          (points[i + 2][1] - points[i][1]) / (points[i + 2][0] - points[i][0])):
+                points.pop(i + 1)
+            else:
+                i += 1
+        return points
+
+    def draw_marker(self, marker: Instruction, s, x, y):
+        # Set the line's points according to the desired position of the marker.
+        shape = self.marker_shape
+        if shape is None:
+            return
+        x, cx, r = x - s / 2, x, x + s / 2
+        y, cy, t = y - s / 2, y, y + s / 2
+        d = .5 * sqrt(.5) * s
+        if shape in 'x+*-|<>v^sd':
+            marker.points = \
+                (x, y, r, t, cx, cy, x, t, r, y) if shape == 'x' else \
+                (x, cy, r, cy, cx, cy, cx, y, cx, t) if shape == '+' else \
+                (x, cy, r, cy, cx, cy, cx, y, cx, t, cx, cy, cx - d, cy - d, cx + d, cy + d, cx, cy, cx - d, cy + d, cx + d, cy - d) \
+                    if shape == '*' else \
+                (x, cy, r, cy) if shape == '-' else \
+                (cx, y, cx, t) if shape == '|' else \
+                (x, y, r, cy, x, t) if shape == '>' else \
+                (r, y, x, cy, r, t) if shape == '<' else \
+                (x, t, cx, y, r, t) if shape == 'v' else \
+                (x, y, cx, t, r, y) if shape == '^' else \
+                (x, y, x, t, r, t, r, y, x, y, x, t) if shape == 's' else \
+                (x, cy, cx, t, r, cy, cx, y, x, cy, cx, t) if shape == 'd' else \
+                NotImplemented
+        elif shape == 'o':
+            marker.ellipse = (x, y, s, s)
+        elif shape in 'OS':
+            marker.pos = x, y
+            marker.size = s, s
+        elif shape == 'D':
+            marker.vertices = (x, cy, 0, 0, cx, t, 0, 0, r, cy, 0, 0, cx, y, 0, 0)
+        else:
+            raise NotImplementedError()
+
+    def create_legend_drawings(self):
+        self._legend_line = SmoothLine(width=self.line_width)
+        self._legend_marker = self.get_marker()
+        self._legend_group = InstructionGroup()
+        self._legend_group.add(self._color)
+        self._legend_group.add(self._legend_line)
+        self._legend_group.add(self._marker_color)
+        self._legend_group.add(self._legend_marker)
+        return [self._legend_group]
+
+    def draw_legend(self, center=None, maximum_size=None, force_new=False):
+        self._legend_maximum_drawing_size = maximum_size = maximum_size or self._legend_maximum_drawing_size
+        self._legend_marker_center = center = center or self._legend_marker_center
+        if not center:
+            return
+        if force_new:
+            self._legend_group.remove(self._legend_marker)
+            self._legend_marker = self.get_marker()
+            self._legend_group.add(self._legend_marker)
+        marker_size = min(self.marker_size, *maximum_size)
+        self.draw_marker(self._legend_marker, marker_size, *center)
+        self._legend_line.points = [center[0] - maximum_size[0] / 2, center[1],
+                                    center[0] + maximum_size[0] / 2, center[1]]
 
 
 if __name__ == '__main__':
