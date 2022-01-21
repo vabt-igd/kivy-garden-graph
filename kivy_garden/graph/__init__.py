@@ -133,9 +133,9 @@ class Graph(Widget):
     # triggers only a update of colors, e.g. tick_color
     _trigger_color = ObjectProperty(None)
     # holds widget with the x-axis label
-    _xlabel = ObjectProperty(None)
+    _xlabel = ObjectProperty(None, allownone=True)
     # holds widget with the y-axis label
-    _ylabel = ObjectProperty(None)
+    _ylabel = ObjectProperty(None, allownone=True)
     # holds all the x-axis tick mark labels
     _x_grid_label = ListProperty([])
     # holds all the y-axis tick mark labels
