@@ -557,8 +557,9 @@ class Graph(Widget):
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
+            for k in range(len(ylabels)):
                 ylabels[k].pos = (
-                    int(x_next),
+                    int(x_next) - ylabels[k].width + y1,
                     int(y_start + (ypoints[k] - ymin) * ratio))
             if len(ylabels) > 1 and ylabels[0].top > ylabels[1].y:
                 y_overlap = True
