@@ -16,7 +16,7 @@ __version__ = locals['__version__']
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-URL = 'https://github.com/kivy-garden/graph'
+URL = 'https://github.com/HoerTech-gGmbH/kivy-garden-graph'
 
 setup(
     name='kivy_garden.graph',
