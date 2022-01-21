@@ -58,7 +58,7 @@ from typing import Optional, List, Tuple, Any, Callable, Union
 
 from kivy.graphics.instructions import InstructionGroup, Instruction
 from kivy.graphics.vertex_instructions import Line, SmoothLine, Ellipse
-from kivy.metrics import dp
+from kivy.metrics import dp, sp
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.stencilview import StencilView
@@ -165,6 +165,33 @@ class Graph(Widget):
 
     label_options = DictProperty()
     '''Label options that will be passed to `:class:`kivy.uix.Label`.
+    
+    These options are applied to axis labels, tick labels and legend labels,
+    if not overwritten by :data:`tick_label_options` or :data:`legend_label_options`
+    respectively.
+    
+    :data:`label_options` is an :class:`kivy.properties.DictProperty`
+    and defaults to the empty dict.
+    '''
+
+    tick_label_options = DictProperty()
+    '''Additional label options for the tick labels.
+    
+    These options are applied to tick labels and do overwrite the values in
+    :data:`label_options` for the tick labels.
+    
+    :data:`tick_label_options` is an :class:`kivy.properties.DictProperty`
+    and defaults to the empty dict.
+    '''
+
+    legend_label_options = DictProperty()
+    '''Additional label options for the legend labels.
+    
+    These options are applied to legend labels and do overwrite the values in
+    :data:`label_options` for the legend labels.
+    
+    :data:`legend_label_options` is an :class:`kivy.properties.DictProperty`
+    and defaults to the empty dict.
     '''
 
     def _get_legend(self):
@@ -206,7 +233,9 @@ class Graph(Widget):
         self._legend_plots = []
         self._legend.canvas.clear()
         for name, plot in legend:
-            label = Label(text=name, **self.label_options, size_hint=(None, None))
+            options = self.label_options.copy()
+            options.update(**self.legend_label_options)
+            label = Label(text=name, **options, size_hint=(None, None))
             def set_size(instance, size):
                 instance.size = size
             label.bind(texture_size=set_size)
@@ -338,7 +367,8 @@ class Graph(Widget):
         self.bind(xmin=t, xmax=t, xlog=t, x_ticks_major=t, x_ticks_minor=t,
                   xlabel=t, x_grid_label=t, ymin=t, ymax=t, ylog=t,
                   y_ticks_major=t, y_ticks_minor=t, ylabel=t, y_grid_label=t,
-                  font_size=t, label_options=t, x_ticks_angle=t)
+                  label_options=t, x_ticks_angle=t,
+                  tick_label_options=t, legend_label_options=t)
         self.bind(tick_color=tc, background_color=tc, border_color=tc)
         self.bind(legend=tl, view_pos=tl, view_size=tl, pos=tl, legend_marker_size=tl)
         self._trigger()
@@ -711,8 +741,10 @@ class Graph(Widget):
         ypoints_major, ypoints_minor = self._redraw_y(*args)
 
         if self._legend:
+            options = self.label_options.copy()
+            options.update(**self.legend_label_options)
             for c in self._legend.children:
-                for k, v in self.label_options.items():
+                for k, v in options.items():
                     setattr(c, k, v)
 
         mesh = self._mesh_ticks
@@ -723,7 +755,6 @@ class Graph(Widget):
         self._redraw_size()
 
     def _redraw_x(self, *args):
-        font_size = self.font_size
         if self.xlabel:
             xlabel = self._xlabel
             if not xlabel:
@@ -731,7 +762,6 @@ class Graph(Widget):
                 self.add_widget(xlabel)
                 self._xlabel = xlabel
 
-            xlabel.font_size = font_size
             for k, v in self.label_options.items():
                 setattr(xlabel, k, v)
 
@@ -761,15 +791,16 @@ class Graph(Widget):
 
         grid_len = len(grids)
         grids.extend([None] * (n_labels - len(grids)))
+        options = self.label_options.copy()
+        options.update(**self.tick_label_options)
         for k in range(grid_len, n_labels):
             grids[k] = GraphRotatedLabel(
-                font_size=font_size, angle=self.x_ticks_angle,
-                **self.label_options)
+                angle=self.x_ticks_angle,
+                **options)
             self.add_widget(grids[k])
         return xpoints_major, xpoints_minor
 
     def _redraw_y(self, *args):
-        font_size = self.font_size
         if self.ylabel:
             ylabel = self._ylabel
             if not ylabel:
@@ -777,7 +808,6 @@ class Graph(Widget):
                 self.add_widget(ylabel)
                 self._ylabel = ylabel
 
-            ylabel.font_size = font_size
             for k, v in self.label_options.items():
                 setattr(ylabel, k, v)
         else:
@@ -806,8 +836,10 @@ class Graph(Widget):
 
         grid_len = len(grids)
         grids.extend([None] * (n_labels - len(grids)))
+        options = self.label_options.copy()
+        options.update(**self.tick_label_options)
         for k in range(grid_len, n_labels):
-            grids[k] = Label(font_size=font_size, **self.label_options)
+            grids[k] = Label(**options)
             self.add_widget(grids[k])
         return ypoints_major, ypoints_minor
 
@@ -1138,13 +1170,6 @@ class Graph(Widget):
 
     :data:`padding` is a :class:`~kivy.properties.NumericProperty`, defaults
     to 5dp.
-    '''
-
-    font_size = NumericProperty('15sp')
-    '''Font size of the labels.
-
-    :data:`font_size` is a :class:`~kivy.properties.NumericProperty`, defaults
-    to 15sp.
     '''
 
     x_ticks_angle = NumericProperty(0)
