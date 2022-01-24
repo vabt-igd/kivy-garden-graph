@@ -1706,6 +1706,19 @@ class LineAndMarkerPlot(Plot):
     and defaults to None.
     """
 
+    legend_display = OptionProperty('marker', options=('marker', 'both', 'line'))
+    """How to display this plot in the legend.
+    
+    Options:
+        'marker':   Displays only the marker if :data:`marker_shape` is not None
+                    and only the line otherwise.
+        'both':     Displays line and marker.
+        'line':     Displays only the line.
+    
+    :data:`legend_display` is a :class:`kivy.properties.OptionProperty`
+    and defaults to 'marker'.
+    """
+
     def __init__(self, **kwargs):
 
         # The following are set in self.create_drawings.
@@ -1751,6 +1764,8 @@ class LineAndMarkerPlot(Plot):
         # When the shape of the markers changes, the Marker Line class may change, so create markers new and draw them.
         self.fbind('marker_shape', lambda *_: self.draw_markers(force_new=True))
         self.fbind('marker_shape', lambda *_: self.draw_legend(force_new=True))
+        # Redraw legend, when legend_display changes.
+        self.fbind('legend_display', lambda *_: self.draw_legend(force_new=True))
 
         def update_color(*_):
             if self._color:
@@ -1884,13 +1899,19 @@ class LineAndMarkerPlot(Plot):
         if not center:
             return
         if force_new:
-            self._legend_group.remove(self._legend_marker)
-            self._legend_marker = self.get_marker()
-            self._legend_group.add(self._legend_marker)
-        marker_size = min(self.marker_size, *maximum_size)
-        self.draw_marker(self._legend_marker, marker_size, *center)
-        self._legend_line.points = [center[0] - maximum_size[0] / 2, center[1],
-                                    center[0] + maximum_size[0] / 2, center[1]]
+            if self._legend_marker:
+                self._legend_group.remove(self._legend_marker)
+                self._legend_marker = None
+            if not self.legend_display == 'line':
+                self._legend_marker = self.get_marker()
+                self._legend_group.add(self._legend_marker)
+        if self._legend_marker:
+            marker_size = min(self.marker_size, *maximum_size)
+            self.draw_marker(self._legend_marker, marker_size, *center)
+        self._legend_line.points = \
+            [] if self.legend_display == 'marker' and self.marker_shape else \
+            [center[0] - maximum_size[0] / 2, center[1],
+             center[0] + maximum_size[0] / 2, center[1]]
 
 
 if __name__ == '__main__':
