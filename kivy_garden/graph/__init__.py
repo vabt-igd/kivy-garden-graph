@@ -566,7 +566,10 @@ class Graph(Widget):
             y_start -= y1[1] / 2.
             y1 = y1[0]
             for k in range(len(ylabels)):
-                ylabels[k].text = get_text(k)
+                try:
+                    ylabels[k].text = get_text(k)
+                except IndexError:
+                    break
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
@@ -598,7 +601,10 @@ class Graph(Widget):
             ratio = (xextent - x_next) / float(funclog(self.xmax) - xmin)
             right = -1
             for k in range(len(xlabels)):
-                xlabels[k].text = get_text(k)
+                try:
+                    xlabels[k].text = get_text(k)
+                except IndexError:
+                    pass
                 # update the size so we can center the labels on ticks
                 xlabels[k].texture_update()
                 xlabels[k].size = xlabels[k].texture_size
