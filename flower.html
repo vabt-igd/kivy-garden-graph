@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph &mdash; Graph  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="The Graph API" href="api.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> Graph
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">The Graph API</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Graph</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-kivy_garden.graph"><code class="xref py py-mod docutils literal notranslate"><span class="pre">kivy_garden.graph</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id1">Graph</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Graph</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="api.html">The Graph API</a> &raquo;</li>
+      <li>Graph</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/flower.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="graph">
+<span id="flower-api"></span><h1>Graph<a class="headerlink" href="#graph" title="Permalink to this headline"></a></h1>
+<section id="module-kivy_garden.graph">
+<span id="kivy-garden-graph"></span><h2><a class="reference internal" href="#module-kivy_garden.graph" title="kivy_garden.graph"><code class="xref py py-mod docutils literal notranslate"><span class="pre">kivy_garden.graph</span></code></a><a class="headerlink" href="#module-kivy_garden.graph" title="Permalink to this headline"></a></h2>
+<section id="id1">
+<h3>Graph<a class="headerlink" href="#id1" title="Permalink to this headline"></a></h3>
+<p>The <a class="reference internal" href="#kivy_garden.graph.Graph" title="kivy_garden.graph.Graph"><code class="xref py py-class docutils literal notranslate"><span class="pre">Graph</span></code></a> widget is a widget for displaying plots. It supports
+drawing multiple plot with different colors on the Graph. It also supports
+axes titles, ticks, labeled ticks, grids and a log or linear representation on
+both the x and y axis, independently.</p>
+<p>To display a plot. First create a graph which will function as a “canvas” for
+the plots. Then create plot objects e.g. MeshLinePlot and add them to the
+graph.</p>
+<p>To create a graph with x-axis between 0-100, y-axis between -1 to 1, x and y
+labels of and X and Y, respectively, x major and minor ticks every 25, 5 units,
+respectively, y major ticks every 1 units, full x and y grids and with
+a red line plot containing a sin wave on this range:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">kivy_garden.graph</span> <span class="kn">import</span> <span class="n">Graph</span><span class="p">,</span> <span class="n">MeshLinePlot</span>
+<span class="n">graph</span> <span class="o">=</span> <span class="n">Graph</span><span class="p">(</span><span class="n">xlabel</span><span class="o">=</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="s1">&#39;Y&#39;</span><span class="p">,</span> <span class="n">x_ticks_minor</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+              <span class="n">x_ticks_major</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">y_ticks_major</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+              <span class="n">y_grid_label</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">x_grid_label</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+              <span class="n">x_grid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">y_grid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">xmin</span><span class="o">=-</span><span class="mi">0</span><span class="p">,</span> <span class="n">xmax</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">ymin</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">ymax</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">plot</span> <span class="o">=</span> <span class="n">MeshLinePlot</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="n">plot</span><span class="o">.</span><span class="n">points</span> <span class="o">=</span> <span class="p">[(</span><span class="n">x</span><span class="p">,</span> <span class="n">sin</span><span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">10.</span><span class="p">))</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">101</span><span class="p">)]</span>
+<span class="n">graph</span><span class="o">.</span><span class="n">add_plot</span><span class="p">(</span><span class="n">plot</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The MeshLinePlot plot is a particular plot which draws a set of points using
+a mesh object. The points are given as a list of tuples, with each tuple
+being a (x, y) coordinate in the graph’s units.</p>
+<p>You can create different types of plots other than MeshLinePlot by inheriting
+from the Plot class and implementing the required functions. The Graph object
+provides a “canvas” to which a Plot’s instructions are added. The plot object
+is responsible for updating these instructions to show within the bounding
+box of the graph the proper plot. The Graph notifies the Plot when it needs
+to be redrawn due to changes. See the MeshLinePlot class for how it is done.</p>
+<p>The current availables plots are:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><cite>MeshStemPlot</cite></p></li>
+<li><p><cite>MeshLinePlot</cite></p></li>
+<li><p><cite>SmoothLinePlot</cite> - require Kivy 1.8.1</p></li>
+</ul>
+</div></blockquote>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The graph uses a stencil view to clip the plots to the graph display area.
+As with the stencil graphics instructions, you cannot stack more than 8
+stencil-aware widgets.</p>
+</div>
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">ContourPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ContourPlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>ContourPlot visualizes 3 dimensional data as an intensity map image.
+The user must first specify ‘xrange’ and ‘yrange’ (tuples of min,max) and
+then ‘data’, the intensity values.
+<cite>data</cite>, is a MxN matrix, where the first dimension of size M specifies the
+<cite>y</cite> values, and the second dimension of size N specifies the <cite>x</cite> values.
+Axis Y and X values are assumed to be linearly spaced values from
+xrange/yrange and the dimensions of ‘data’, <cite>MxN</cite>, respectively.
+The color values are automatically scaled to the min and max z range of the
+data set.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ContourPlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot.data">
+<span class="sig-name descname"><span class="pre">data</span></span><a class="headerlink" href="#kivy_garden.graph.ContourPlot.data" title="Permalink to this definition"></a></dt>
+<dd><p>ObjectProperty(defaultvalue=None, rebind=False, <a href="#id2"><span class="problematic" id="id3">**</span></a>kw)
+Property that represents a Python object.</p>
+<blockquote>
+<div><dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl>
+<dt><cite>defaultvalue</cite>: object type</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+<dt><cite>rebind</cite>: bool, defaults to False</dt><dd><p>Whether kv rules using this object as an intermediate attribute
+in a kv rule, will update the bound property when this object
+changes.</p>
+<p>That is the standard behavior is that if there’s a kv rule
+<code class="docutils literal notranslate"><span class="pre">text:</span> <span class="pre">self.a.b.c.d</span></code>, where <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, and <code class="docutils literal notranslate"><span class="pre">c</span></code> are
+properties with <code class="docutils literal notranslate"><span class="pre">rebind</span></code> <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">d</span></code> is a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">StringProperty</span></code>. Then when the rule is applied, <code class="docutils literal notranslate"><span class="pre">text</span></code>
+becomes bound only to <code class="docutils literal notranslate"><span class="pre">d</span></code>. If <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, or <code class="docutils literal notranslate"><span class="pre">c</span></code> change,
+<code class="docutils literal notranslate"><span class="pre">text</span></code> still remains bound to <code class="docutils literal notranslate"><span class="pre">d</span></code>. Furthermore, if any of them
+were <code class="docutils literal notranslate"><span class="pre">None</span></code> when the rule was initially evaluated, e.g. <code class="docutils literal notranslate"><span class="pre">b</span></code> was
+<code class="docutils literal notranslate"><span class="pre">None</span></code>; then <code class="docutils literal notranslate"><span class="pre">text</span></code> is bound to <code class="docutils literal notranslate"><span class="pre">b</span></code> and will not become bound
+to <code class="docutils literal notranslate"><span class="pre">d</span></code> even when <code class="docutils literal notranslate"><span class="pre">b</span></code> is changed to not be <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<p>By setting <code class="docutils literal notranslate"><span class="pre">rebind</span></code> to <code class="docutils literal notranslate"><span class="pre">True</span></code>, however, the rule will be
+re-evaluated and all the properties rebound when that intermediate
+property changes. E.g. in the example above, whenever <code class="docutils literal notranslate"><span class="pre">b</span></code> changes
+or becomes not <code class="docutils literal notranslate"><span class="pre">None</span></code> if it was <code class="docutils literal notranslate"><span class="pre">None</span></code> before, <code class="docutils literal notranslate"><span class="pre">text</span></code> is
+evaluated again and becomes rebound to <code class="docutils literal notranslate"><span class="pre">d</span></code>. The overall result is
+that <code class="docutils literal notranslate"><span class="pre">text</span></code> is now bound to all the properties among <code class="docutils literal notranslate"><span class="pre">a</span></code>,
+<code class="docutils literal notranslate"><span class="pre">b</span></code>, or <code class="docutils literal notranslate"><span class="pre">c</span></code> that have <code class="docutils literal notranslate"><span class="pre">rebind</span></code> set to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
+</dd>
+<dt><cite>**kwargs</cite>: a list of keyword arguments</dt><dd><dl class="simple">
+<dt><cite>baseclass</cite></dt><dd><p>If kwargs includes a <cite>baseclass</cite> argument, this value will be
+used for validation: <cite>isinstance(value, kwargs[‘baseclass’])</cite>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>To mark the property as changed, you must reassign a new python object.</p>
+</div>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 1.9.0: </span><cite>rebind</cite> has been introduced.</p>
+</div>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 1.7.0: </span><cite>baseclass</cite> parameter added.</p>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ContourPlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot.xrange">
+<span class="sig-name descname"><span class="pre">xrange</span></span><a class="headerlink" href="#kivy_garden.graph.ContourPlot.xrange" title="Permalink to this definition"></a></dt>
+<dd><p>ListProperty(defaultvalue=0, <a href="#id4"><span class="problematic" id="id5">**</span></a>kw)
+Property that represents a list.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: list, defaults to []</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>When assigning a list to a <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code>, the list stored in
+the property is a shallow copy of the list and not the original list. This can
+be demonstrated with the following example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyWidget</span><span class="p">(</span><span class="n">Widget</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">my_list</span> <span class="o">=</span> <span class="n">ListProperty</span><span class="p">([])</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span> <span class="o">=</span> <span class="n">MyWidget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;hi&#39;</span><span class="p">:</span> <span class="s1">&#39;hello&#39;</span><span class="p">}]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span><span class="o">.</span><span class="n">my_list</span> <span class="o">=</span> <span class="n">my_list</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span> <span class="ow">is</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;hello&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;hello&#39;}]</span>
+</pre></div>
+</div>
+<p>However, changes to nested levels will affect the property as well,
+since the property uses a shallow copy of my_list.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="s1">&#39;hi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;bye&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;bye&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;bye&#39;}]</span>
+</pre></div>
+</div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.ContourPlot.yrange">
+<span class="sig-name descname"><span class="pre">yrange</span></span><a class="headerlink" href="#kivy_garden.graph.ContourPlot.yrange" title="Permalink to this definition"></a></dt>
+<dd><p>ListProperty(defaultvalue=0, <a href="#id6"><span class="problematic" id="id7">**</span></a>kw)
+Property that represents a list.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: list, defaults to []</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>When assigning a list to a <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code>, the list stored in
+the property is a shallow copy of the list and not the original list. This can
+be demonstrated with the following example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyWidget</span><span class="p">(</span><span class="n">Widget</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">my_list</span> <span class="o">=</span> <span class="n">ListProperty</span><span class="p">([])</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span> <span class="o">=</span> <span class="n">MyWidget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;hi&#39;</span><span class="p">:</span> <span class="s1">&#39;hello&#39;</span><span class="p">}]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span><span class="o">.</span><span class="n">my_list</span> <span class="o">=</span> <span class="n">my_list</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span> <span class="ow">is</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;hello&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;hello&#39;}]</span>
+</pre></div>
+</div>
+<p>However, changes to nested levels will affect the property as well,
+since the property uses a shallow copy of my_list.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="s1">&#39;hi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;bye&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;bye&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;bye&#39;}]</span>
+</pre></div>
+</div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">Graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.uix.widget.html#kivy.uix.widget.Widget" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.uix.widget.Widget</span></code></a></p>
+<p>Graph class, see module documentation for more information.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.add_plot">
+<span class="sig-name descname"><span class="pre">add_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.add_plot" title="Permalink to this definition"></a></dt>
+<dd><p>Add a new plot to this graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>plot</cite>:</dt><dd><p>Plot to add to this graph.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span> <span class="o">=</span> <span class="n">Graph</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plot</span> <span class="o">=</span> <span class="n">MeshLinePlot</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s1">&#39;line_strip&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plot</span><span class="o">.</span><span class="n">points</span> <span class="o">=</span> <span class="p">[(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">10.</span><span class="p">,</span> <span class="n">sin</span><span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">50.</span><span class="p">))</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="mi">0</span><span class="p">,</span> <span class="mi">101</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span><span class="o">.</span><span class="n">add_plot</span><span class="p">(</span><span class="n">plot</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.add_widget">
+<span class="sig-name descname"><span class="pre">add_widget</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">widget</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.add_widget" title="Permalink to this definition"></a></dt>
+<dd><p>Add a new widget as a child of this widget.</p>
+<blockquote>
+<div><dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl>
+<dt><cite>widget</cite>: <code class="xref py py-class docutils literal notranslate"><span class="pre">Widget</span></code></dt><dd><p>Widget to add to our list of children.</p>
+</dd>
+<dt><cite>index</cite>: int, defaults to 0</dt><dd><p>Index to insert the widget in the list. Notice that the default
+of 0 means the widget is inserted at the beginning of the list
+and will thus be drawn on top of other sibling widgets. For a
+full discussion of the index and widget hierarchy, please see
+the <a class="reference external" href="https://kivy.org/doc/stable/guide/widgets.html" title="(in Kivy v2.0.0)"><span class="xref std std-doc">Widgets Programming Guide</span></a>.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">New in version 1.0.5.</span></p>
+</div>
+</dd>
+<dt><cite>canvas</cite>: str, defaults to None</dt><dd><p>Canvas to add widget’s canvas to. Can be ‘before’, ‘after’ or
+None for the default canvas.</p>
+<div class="versionadded">
+<p><span class="versionmodified added">New in version 1.9.0.</span></p>
+</div>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">kivy.uix.button</span> <span class="kn">import</span> <span class="n">Button</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">kivy.uix.slider</span> <span class="kn">import</span> <span class="n">Slider</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span> <span class="o">=</span> <span class="n">Widget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span><span class="o">.</span><span class="n">add_widget</span><span class="p">(</span><span class="n">Button</span><span class="p">())</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">slider</span> <span class="o">=</span> <span class="n">Slider</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span><span class="o">.</span><span class="n">add_widget</span><span class="p">(</span><span class="n">slider</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.add_x_axis">
+<span class="sig-name descname"><span class="pre">add_x_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xmin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xmax</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlog</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.add_x_axis" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.add_y_axis">
+<span class="sig-name descname"><span class="pre">add_y_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ymin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ymax</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylog</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.add_y_axis" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.background_color">
+<span class="sig-name descname"><span class="pre">background_color</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.background_color" title="Permalink to this definition"></a></dt>
+<dd><p>Color of the background, defaults to transparent</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.border_color">
+<span class="sig-name descname"><span class="pre">border_color</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.border_color" title="Permalink to this definition"></a></dt>
+<dd><p>Color of the border, defaults to white</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.collide_plot">
+<span class="sig-name descname"><span class="pre">collide_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.collide_plot" title="Permalink to this definition"></a></dt>
+<dd><p>Determine if the given coordinates fall inside the plot area. Use
+<cite>x, y = self.to_widget(x, y, relative=True)</cite> to first convert into
+widget coordinates if it’s in window coordinates because it’s assumed
+to be given in local widget coordinates, relative to the graph’s pos.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>x, y</cite>:</dt><dd><p>The coordinates to test.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.draw_border">
+<span class="sig-name descname"><span class="pre">draw_border</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.draw_border" title="Permalink to this definition"></a></dt>
+<dd><p>Whether a border is drawn around the canvas of the graph where the
+plots are displayed.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.draw_border" title="kivy_garden.graph.Graph.draw_border"><code class="xref py py-data docutils literal notranslate"><span class="pre">draw_border</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BooleanProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanProperty</span></code></a>,
+defaults to True.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.get_x_axis">
+<span class="sig-name descname"><span class="pre">get_x_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.get_x_axis" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.get_y_axis">
+<span class="sig-name descname"><span class="pre">get_y_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.get_y_axis" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.label_options">
+<span class="sig-name descname"><span class="pre">label_options</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.label_options" title="Permalink to this definition"></a></dt>
+<dd><p>Label options that will be passed to <cite>:class:`kivy.uix.Label</cite>.</p>
+<p>These options are applied to axis labels, tick labels and legend labels,
+if not overwritten by <a class="reference internal" href="#kivy_garden.graph.Graph.tick_label_options" title="kivy_garden.graph.Graph.tick_label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">tick_label_options</span></code></a> or <a class="reference internal" href="#kivy_garden.graph.Graph.legend_label_options" title="kivy_garden.graph.Graph.legend_label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">legend_label_options</span></code></a>
+respectively.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.label_options" title="kivy_garden.graph.Graph.label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">label_options</span></code></a> is an <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.DictProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.DictProperty</span></code></a>
+and defaults to the empty dict.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.legend">
+<span class="sig-name descname"><span class="pre">legend</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">kivy_garden.graph.GraphLegend</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#kivy_garden.graph.Graph.legend" title="Permalink to this definition"></a></dt>
+<dd><p>Legend of graph’s plots.</p>
+<p>You set the legend with an iterable yielding tuples containing the name
+and <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">Plot</span></code></a> instance, you want to be displayed.
+Getting the legend returns an instance of <code class="xref py py-class docutils literal notranslate"><span class="pre">GraphLegend</span></code>.</p>
+<p>See the <code class="xref py py-class docutils literal notranslate"><span class="pre">GraphLegend</span></code> class documentation for a usage example.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.legend" title="kivy_garden.graph.Graph.legend"><code class="xref py py-data docutils literal notranslate"><span class="pre">legend</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.AliasProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">AliasProperty</span></code></a>,
+defaults to None.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.legend_label_options">
+<span class="sig-name descname"><span class="pre">legend_label_options</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.legend_label_options" title="Permalink to this definition"></a></dt>
+<dd><p>Additional label options for the legend labels.</p>
+<p>These options are applied to legend labels and do overwrite the values in
+<a class="reference internal" href="#kivy_garden.graph.Graph.label_options" title="kivy_garden.graph.Graph.label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">label_options</span></code></a> for the legend labels.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.legend_label_options" title="kivy_garden.graph.Graph.legend_label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">legend_label_options</span></code></a> is an <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.DictProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.DictProperty</span></code></a>
+and defaults to the empty dict.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.padding">
+<span class="sig-name descname"><span class="pre">padding</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.padding" title="Permalink to this definition"></a></dt>
+<dd><p>Padding distances between the labels, axes titles and graph, as
+well between the widget and the objects near the boundaries.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.padding" title="kivy_garden.graph.Graph.padding"><code class="xref py py-data docutils literal notranslate"><span class="pre">padding</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>, defaults
+to 5dp.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.plots">
+<span class="sig-name descname"><span class="pre">plots</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.plots" title="Permalink to this definition"></a></dt>
+<dd><p>Holds a list of all the plots in the graph. To add and remove plots
+from the graph use <a class="reference internal" href="#kivy_garden.graph.Graph.add_plot" title="kivy_garden.graph.Graph.add_plot"><code class="xref py py-data docutils literal notranslate"><span class="pre">add_plot</span></code></a> and <a class="reference internal" href="#kivy_garden.graph.Graph.add_plot" title="kivy_garden.graph.Graph.add_plot"><code class="xref py py-data docutils literal notranslate"><span class="pre">add_plot</span></code></a>. Do not add
+directly edit this list.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.plots" title="kivy_garden.graph.Graph.plots"><code class="xref py py-data docutils literal notranslate"><span class="pre">plots</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ListProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code></a>,
+defaults to [].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.precision">
+<span class="sig-name descname"><span class="pre">precision</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.precision" title="Permalink to this definition"></a></dt>
+<dd><p>Determines the numerical precision of the tick mark labels. This value
+governs how the numbers are converted into string representation. Accepted
+values are those listed in Python’s manual in the
+“String Formatting Operations” section.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.precision" title="kivy_garden.graph.Graph.precision"><code class="xref py py-data docutils literal notranslate"><span class="pre">precision</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.StringProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringProperty</span></code></a>, defaults
+to ‘%g’.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.remove_plot">
+<span class="sig-name descname"><span class="pre">remove_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.remove_plot" title="Permalink to this definition"></a></dt>
+<dd><p>Remove a plot from this graph.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>plot</cite>:</dt><dd><p>Plot to remove from this graph.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span> <span class="o">=</span> <span class="n">Graph</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plot</span> <span class="o">=</span> <span class="n">MeshLinePlot</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s1">&#39;line_strip&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">plot</span><span class="o">.</span><span class="n">points</span> <span class="o">=</span> <span class="p">[(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">10.</span><span class="p">,</span> <span class="n">sin</span><span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="mf">50.</span><span class="p">))</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="mi">0</span><span class="p">,</span> <span class="mi">101</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span><span class="o">.</span><span class="n">add_plot</span><span class="p">(</span><span class="n">plot</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span><span class="o">.</span><span class="n">remove_plot</span><span class="p">(</span><span class="n">plot</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.remove_widget">
+<span class="sig-name descname"><span class="pre">remove_widget</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">widget</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.remove_widget" title="Permalink to this definition"></a></dt>
+<dd><p>Remove a widget from the children of this widget.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>widget</cite>: <code class="xref py py-class docutils literal notranslate"><span class="pre">Widget</span></code></dt><dd><p>Widget to remove from our children list.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</div></blockquote>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">kivy.uix.button</span> <span class="kn">import</span> <span class="n">Button</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span> <span class="o">=</span> <span class="n">Widget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">button</span> <span class="o">=</span> <span class="n">Button</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span><span class="o">.</span><span class="n">add_widget</span><span class="p">(</span><span class="n">button</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">root</span><span class="o">.</span><span class="n">remove_widget</span><span class="p">(</span><span class="n">button</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.tick_color">
+<span class="sig-name descname"><span class="pre">tick_color</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.tick_color" title="Permalink to this definition"></a></dt>
+<dd><p>Color of the grid/ticks, default to 1/4. grey.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.tick_label_options">
+<span class="sig-name descname"><span class="pre">tick_label_options</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.tick_label_options" title="Permalink to this definition"></a></dt>
+<dd><p>Additional label options for the tick labels.</p>
+<p>These options are applied to tick labels and do overwrite the values in
+<a class="reference internal" href="#kivy_garden.graph.Graph.label_options" title="kivy_garden.graph.Graph.label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">label_options</span></code></a> for the tick labels.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.tick_label_options" title="kivy_garden.graph.Graph.tick_label_options"><code class="xref py py-data docutils literal notranslate"><span class="pre">tick_label_options</span></code></a> is an <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.DictProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.DictProperty</span></code></a>
+and defaults to the empty dict.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.to_data">
+<span class="sig-name descname"><span class="pre">to_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Graph.to_data" title="Permalink to this definition"></a></dt>
+<dd><p>Convert widget coords to data coords. Use
+<cite>x, y = self.to_widget(x, y, relative=True)</cite> to first convert into
+widget coordinates if it’s in window coordinates because it’s assumed
+to be given in local widget coordinates, relative to the graph’s pos.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>x, y</cite>:</dt><dd><p>The coordinates to convert.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>If the graph has multiple axes, use <a class="reference internal" href="#kivy_garden.graph.Plot.unproject" title="kivy_garden.graph.Plot.unproject"><code class="xref py py-class docutils literal notranslate"><span class="pre">Plot.unproject</span></code></a> instead.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.view_pos">
+<span class="sig-name descname"><span class="pre">view_pos</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.view_pos" title="Permalink to this definition"></a></dt>
+<dd><p>The pos of the graph viewing area - the area where the plots are
+displayed, excluding labels etc. It is relative to the graph’s pos.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.view_size">
+<span class="sig-name descname"><span class="pre">view_size</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.view_size" title="Permalink to this definition"></a></dt>
+<dd><p>The size of the graph viewing area - the area where the plots are
+displayed, excluding labels etc.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_axis">
+<span class="sig-name descname"><span class="pre">x_axis</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.x_axis" title="Permalink to this definition"></a></dt>
+<dd><p>ListProperty(defaultvalue=0, <a href="#id8"><span class="problematic" id="id9">**</span></a>kw)
+Property that represents a list.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: list, defaults to []</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>When assigning a list to a <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code>, the list stored in
+the property is a shallow copy of the list and not the original list. This can
+be demonstrated with the following example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyWidget</span><span class="p">(</span><span class="n">Widget</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">my_list</span> <span class="o">=</span> <span class="n">ListProperty</span><span class="p">([])</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span> <span class="o">=</span> <span class="n">MyWidget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;hi&#39;</span><span class="p">:</span> <span class="s1">&#39;hello&#39;</span><span class="p">}]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span><span class="o">.</span><span class="n">my_list</span> <span class="o">=</span> <span class="n">my_list</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span> <span class="ow">is</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;hello&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;hello&#39;}]</span>
+</pre></div>
+</div>
+<p>However, changes to nested levels will affect the property as well,
+since the property uses a shallow copy of my_list.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="s1">&#39;hi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;bye&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;bye&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;bye&#39;}]</span>
+</pre></div>
+</div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_grid">
+<span class="sig-name descname"><span class="pre">x_grid</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.x_grid" title="Permalink to this definition"></a></dt>
+<dd><p>Determines whether the x-axis has tick marks or a full grid.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is non-zero, then if x_grid is False tick marks
+will be displayed at every major tick. If x_grid is True, instead of ticks,
+a vertical line will be displayed at every major tick.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.x_grid" title="kivy_garden.graph.Graph.x_grid"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_grid</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BooleanProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanProperty</span></code></a>, defaults
+to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_grid_label">
+<span class="sig-name descname"><span class="pre">x_grid_label</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#kivy_garden.graph.Graph.x_grid_label" title="Permalink to this definition"></a></dt>
+<dd><p>Whether and how labels should be displayed beneath each major tick.</p>
+<p>If false, no tick labels are shown.
+If true, each major tick will have a label containing the axis value displayed at precision <a class="reference internal" href="#kivy_garden.graph.Graph.precision" title="kivy_garden.graph.Graph.precision"><code class="xref py py-data docutils literal notranslate"><span class="pre">precision</span></code></a>.
+It can also be a callable returning the string representation for a given float value.
+It can also be a list or tuple of strings or a string itself. In that case the k-th item will be displayed at the
+k-th major label.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.x_grid_label" title="kivy_garden.graph.Graph.x_grid_label"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_grid_label</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>,
+defaults to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_ticks_angle">
+<span class="sig-name descname"><span class="pre">x_ticks_angle</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.x_ticks_angle" title="Permalink to this definition"></a></dt>
+<dd><p>Rotate angle of the x-axis tick marks.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_angle" title="kivy_garden.graph.Graph.x_ticks_angle"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_angle</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>,
+defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_ticks_major">
+<span class="sig-name descname"><span class="pre">x_ticks_major</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.x_ticks_major" title="Permalink to this definition"></a></dt>
+<dd><p>Positioning of major tick marks on the x-axis.</p>
+<p>May either be a numerical value indicating the distance between ticks
+or a list or tuple giving the absolute tick positions.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is a numeric value greater than zero, it
+determines the distance between the major tick marks. Major tick marks
+start from min and re-occur at every ticks_major until <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a>.
+If <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a> doesn’t overlap with a integer multiple of ticks_major,
+no tick will occur at <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a>. Values below or equal to zero
+indicate no tick marks.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.xlog" title="kivy_garden.graph.Graph.xlog"><code class="xref py py-data docutils literal notranslate"><span class="pre">xlog</span></code></a> is true, then this indicates the distance between ticks
+in multiples of current decade. E.g. if <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a> is 0.1 and
+ticks_major is 0.1, it means there will be a tick at every 10th of the
+decade, i.e. 0.1 … 0.9, 1, 2… If it is 0.3, the ticks will occur at
+0.1, 0.3, 0.6, 0.9, 2, 5, 8, 10. You’ll notice that it went from 8 to 10
+instead of to 20, that’s so that we can say 0.5 and have ticks at every
+half decade, e.g. 0.1, 0.5, 1, 5, 10, 50… Similarly, if ticks_major is
+1.5, there will be ticks at 0.1, 5, 100, 5,000… Also notice, that there’s
+always a major tick at the start. Finally, if e.g. <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a> is 0.6
+and this 0.5 there will be ticks at 0.6, 1, 5…</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is a list or tuple, a major tick will be displayed
+at each of the given values, if it is in the range of <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a> to <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is a
+<a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.x_ticks_minor">
+<span class="sig-name descname"><span class="pre">x_ticks_minor</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.x_ticks_minor" title="Permalink to this definition"></a></dt>
+<dd><p>Positioning of minor tick marks on the x-axis.</p>
+<p>May either be a numerical value indicating the number of subintervals
+between major ticks or a list or tuple giving the absolute tick positions.
+If either one of <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_minor" title="kivy_garden.graph.Graph.x_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_minor</span></code></a> and <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is a
+numerical value and the other one is not, <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_minor" title="kivy_garden.graph.Graph.x_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_minor</span></code></a> is ignored.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a> is a numerical value greater than zero, it
+determines the number of sub-intervals into which ticks_major is divided.
+The actual number of minor ticks between the major ticks is
+ticks_minor - 1. Only used if ticks_major is non-zero. If there’s no major
+tick at xmax then the number of minor ticks after the last major
+tick will be however many ticks fit until xmax.</p>
+<p>If self.xlog is true, then this indicates the number of intervals the
+distance between major ticks is divided. The result is the number of
+multiples of decades between ticks. I.e. if ticks_minor is 10, then if
+ticks_major is 1, there will be ticks at 0.1, 0.2…0.9, 1, 2, 3… If
+ticks_major is 0.3, ticks will occur at 0.1, 0.12, 0.15, 0.18… Finally,
+as is common, if ticks major is 1, and ticks minor is 5, there will be
+ticks at 0.1, 0.2, 0.4… 0.8, 1, 2…</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_minor" title="kivy_garden.graph.Graph.x_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_minor</span></code></a> is a list or tuple, a minor tick will be displayed
+at each of the given values, if it is in the range of <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a> to <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_minor" title="kivy_garden.graph.Graph.x_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_minor</span></code></a> is a
+<a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.xlabel">
+<span class="sig-name descname"><span class="pre">xlabel</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.xlabel" title="Permalink to this definition"></a></dt>
+<dd><p>The label for the x-axis. If not empty it is displayed in the center of
+the axis.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.xlabel" title="kivy_garden.graph.Graph.xlabel"><code class="xref py py-data docutils literal notranslate"><span class="pre">xlabel</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.StringProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringProperty</span></code></a>,
+defaults to ‘’.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.xlog">
+<span class="sig-name descname"><span class="pre">xlog</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.xlog" title="Permalink to this definition"></a></dt>
+<dd><p>Determines whether the x-axis should be displayed logarithmically (True)
+or linearly (False).</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.xlog" title="kivy_garden.graph.Graph.xlog"><code class="xref py py-data docutils literal notranslate"><span class="pre">xlog</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BooleanProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanProperty</span></code></a>, defaults
+to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.xmax">
+<span class="sig-name descname"><span class="pre">xmax</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.xmax" title="Permalink to this definition"></a></dt>
+<dd><p>The x-axis maximum value.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a> &lt; <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a>, the x axis will be displayed reversed.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.xmin">
+<span class="sig-name descname"><span class="pre">xmin</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.xmin" title="Permalink to this definition"></a></dt>
+<dd><p>The x-axis minimum value.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.xlog" title="kivy_garden.graph.Graph.xlog"><code class="xref py py-data docutils literal notranslate"><span class="pre">xlog</span></code></a> is True, xmin must be larger than zero.
+If <a class="reference internal" href="#kivy_garden.graph.Graph.xmax" title="kivy_garden.graph.Graph.xmax"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmax</span></code></a> &lt; <a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a>, the x axis will be displayed reversed.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.xmin" title="kivy_garden.graph.Graph.xmin"><code class="xref py py-data docutils literal notranslate"><span class="pre">xmin</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.y_axis">
+<span class="sig-name descname"><span class="pre">y_axis</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.y_axis" title="Permalink to this definition"></a></dt>
+<dd><p>ListProperty(defaultvalue=0, <a href="#id10"><span class="problematic" id="id11">**</span></a>kw)
+Property that represents a list.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: list, defaults to []</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>When assigning a list to a <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code>, the list stored in
+the property is a shallow copy of the list and not the original list. This can
+be demonstrated with the following example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">MyWidget</span><span class="p">(</span><span class="n">Widget</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">my_list</span> <span class="o">=</span> <span class="n">ListProperty</span><span class="p">([])</span>
+
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span> <span class="o">=</span> <span class="n">MyWidget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;hi&#39;</span><span class="p">:</span> <span class="s1">&#39;hello&#39;</span><span class="p">}]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">widget</span><span class="o">.</span><span class="n">my_list</span> <span class="o">=</span> <span class="n">my_list</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span> <span class="ow">is</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;hello&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;hello&#39;}]</span>
+</pre></div>
+</div>
+<p>However, changes to nested levels will affect the property as well,
+since the property uses a shallow copy of my_list.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_list</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="s1">&#39;hi&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;bye&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">my_list</span><span class="p">,</span> <span class="n">widget</span><span class="o">.</span><span class="n">my_list</span><span class="p">)</span>
+<span class="go">[1, 5, {&#39;hi&#39;: &#39;bye&#39;}, 10] [1, 5, {&#39;hi&#39;: &#39;bye&#39;}]</span>
+</pre></div>
+</div>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.y_grid">
+<span class="sig-name descname"><span class="pre">y_grid</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.y_grid" title="Permalink to this definition"></a></dt>
+<dd><p>Determines whether the y-axis has tick marks or a full grid. See
+<a class="reference internal" href="#kivy_garden.graph.Graph.x_grid" title="kivy_garden.graph.Graph.x_grid"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_grid</span></code></a>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.y_grid" title="kivy_garden.graph.Graph.y_grid"><code class="xref py py-data docutils literal notranslate"><span class="pre">y_grid</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BooleanProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanProperty</span></code></a>, defaults
+to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.y_grid_label">
+<span class="sig-name descname"><span class="pre">y_grid_label</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#kivy_garden.graph.Graph.y_grid_label" title="Permalink to this definition"></a></dt>
+<dd><p>Whether and how labels should be displayed beneath each major tick.</p>
+<p>If false, no tick labels are shown.
+If true, each major tick will have a label containing the axis value displayed at precision <a class="reference internal" href="#kivy_garden.graph.Graph.precision" title="kivy_garden.graph.Graph.precision"><code class="xref py py-data docutils literal notranslate"><span class="pre">precision</span></code></a>.
+It can also be a callable returning the string representation for a given float value.
+It can also be a list or tuple of strings or a string itself. In that case the k-th item will be displayed at the
+k-th major label.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.y_grid_label" title="kivy_garden.graph.Graph.y_grid_label"><code class="xref py py-data docutils literal notranslate"><span class="pre">y_grid_label</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>,
+defaults to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.y_ticks_major">
+<span class="sig-name descname"><span class="pre">y_ticks_major</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.y_ticks_major" title="Permalink to this definition"></a></dt>
+<dd><p>Positioning of major tick marks on the y-axis.
+See <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_major" title="kivy_garden.graph.Graph.x_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_major</span></code></a>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.y_ticks_major" title="kivy_garden.graph.Graph.y_ticks_major"><code class="xref py py-data docutils literal notranslate"><span class="pre">y_ticks_major</span></code></a> is a
+<a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.y_ticks_minor">
+<span class="sig-name descname"><span class="pre">y_ticks_minor</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.y_ticks_minor" title="Permalink to this definition"></a></dt>
+<dd><p>Positioning of minor tick marks on the y-axis.
+See <a class="reference internal" href="#kivy_garden.graph.Graph.x_ticks_minor" title="kivy_garden.graph.Graph.x_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">x_ticks_minor</span></code></a>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.y_ticks_minor" title="kivy_garden.graph.Graph.y_ticks_minor"><code class="xref py py-data docutils literal notranslate"><span class="pre">y_ticks_minor</span></code></a> is a
+<a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ObjectProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.ylabel">
+<span class="sig-name descname"><span class="pre">ylabel</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.ylabel" title="Permalink to this definition"></a></dt>
+<dd><p>The label for the y-axis. If not empty it is displayed in the center of
+the axis.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.ylabel" title="kivy_garden.graph.Graph.ylabel"><code class="xref py py-data docutils literal notranslate"><span class="pre">ylabel</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.StringProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringProperty</span></code></a>,
+defaults to ‘’.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.ylog">
+<span class="sig-name descname"><span class="pre">ylog</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.ylog" title="Permalink to this definition"></a></dt>
+<dd><p>Determines whether the y-axis should be displayed logarithmically (True)
+or linearly (False).</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.ylog" title="kivy_garden.graph.Graph.ylog"><code class="xref py py-data docutils literal notranslate"><span class="pre">ylog</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BooleanProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanProperty</span></code></a>, defaults
+to False.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.ymax">
+<span class="sig-name descname"><span class="pre">ymax</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.ymax" title="Permalink to this definition"></a></dt>
+<dd><p>The y-axis maximum value.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.ymax" title="kivy_garden.graph.Graph.ymax"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymax</span></code></a> &lt; <a class="reference internal" href="#kivy_garden.graph.Graph.ymin" title="kivy_garden.graph.Graph.ymin"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymin</span></code></a>, the y axis will be displayed reversed.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.ymax" title="kivy_garden.graph.Graph.ymax"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymax</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Graph.ymin">
+<span class="sig-name descname"><span class="pre">ymin</span></span><a class="headerlink" href="#kivy_garden.graph.Graph.ymin" title="Permalink to this definition"></a></dt>
+<dd><p>The y-axis minimum value.</p>
+<p>If <a class="reference internal" href="#kivy_garden.graph.Graph.ylog" title="kivy_garden.graph.Graph.ylog"><code class="xref py py-data docutils literal notranslate"><span class="pre">ylog</span></code></a> is True, ymin must be larger than zero.
+If <a class="reference internal" href="#kivy_garden.graph.Graph.ymax" title="kivy_garden.graph.Graph.ymax"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymax</span></code></a> &lt; <a class="reference internal" href="#kivy_garden.graph.Graph.ymin" title="kivy_garden.graph.Graph.ymin"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymin</span></code></a>, the y axis will be displayed reversed.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Graph.ymin" title="kivy_garden.graph.Graph.ymin"><code class="xref py py-data docutils literal notranslate"><span class="pre">ymin</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.NumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericProperty</span></code></a>, defaults to 0.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">LineAndMarkerPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>A Plot consisting of a line and markers.</p>
+<p>The line is drawn using a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.graphics.html#kivy.graphics.SmoothLine" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.graphics.SmoothLine</span></code></a> and can
+be adapted using the <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.line_width" title="kivy_garden.graph.LineAndMarkerPlot.line_width"><code class="xref py py-data docutils literal notranslate"><span class="pre">line_width</span></code></a> and <code class="xref py py-data docutils literal notranslate"><span class="pre">color</span></code> properties.</p>
+<p>The markers can be adapted using the <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_shape" title="kivy_garden.graph.LineAndMarkerPlot.marker_shape"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_shape</span></code></a>,
+<a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_line_width" title="kivy_garden.graph.LineAndMarkerPlot.marker_line_width"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_line_width</span></code></a>, <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_color" title="kivy_garden.graph.LineAndMarkerPlot.marker_color"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_color</span></code></a> properties.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">_</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_new</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.draw_marker">
+<span class="sig-name descname"><span class="pre">draw_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">marker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://kivy.org/doc/stable/api-kivy.graphics.instructions.html#kivy.graphics.instructions.Instruction" title="(in Kivy v2.0.0)"><span class="pre">kivy.graphics.instructions.Instruction</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.draw_marker" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.draw_markers">
+<span class="sig-name descname"><span class="pre">draw_markers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force_new</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.draw_markers" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.get_marker">
+<span class="sig-name descname"><span class="pre">get_marker</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.get_marker" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.legend_display">
+<span class="sig-name descname"><span class="pre">legend_display</span></span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.legend_display" title="Permalink to this definition"></a></dt>
+<dd><p>How to display this plot in the legend.</p>
+<dl>
+<dt>Options:</dt><dd><dl class="simple">
+<dt>‘marker’:   Displays only the marker if <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_shape" title="kivy_garden.graph.LineAndMarkerPlot.marker_shape"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_shape</span></code></a> is not None</dt><dd><p>and only the line otherwise.</p>
+</dd>
+</dl>
+<p>‘both’:     Displays line and marker.
+‘line’:     Displays only the line.</p>
+</dd>
+</dl>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.legend_display" title="kivy_garden.graph.LineAndMarkerPlot.legend_display"><code class="xref py py-data docutils literal notranslate"><span class="pre">legend_display</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.OptionProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.OptionProperty</span></code></a>
+and defaults to ‘marker’.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.line_width">
+<span class="sig-name descname"><span class="pre">line_width</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.line_width" title="Permalink to this definition"></a></dt>
+<dd><p>Line width of the line connecting the markers.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.line_width" title="kivy_garden.graph.LineAndMarkerPlot.line_width"><code class="xref py py-data docutils literal notranslate"><span class="pre">line_width</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BoundedNumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.BoundedNumericProperty</span></code></a>
+with a minimum of 0 and defaults to 1.1 dp.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.marker_color">
+<span class="sig-name descname"><span class="pre">marker_color</span></span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.marker_color" title="Permalink to this definition"></a></dt>
+<dd><p>Color of the markers.</p>
+<p>May be set to None, in which case the markers are drawn with the same
+color as the line, i. e. the color defines by <code class="xref py py-data docutils literal notranslate"><span class="pre">color</span></code>.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_color" title="kivy_garden.graph.LineAndMarkerPlot.marker_color"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_color</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ColorProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.ColorProperty</span></code></a>
+and defaults to None.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.marker_line_width">
+<span class="sig-name descname"><span class="pre">marker_line_width</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.marker_line_width" title="Permalink to this definition"></a></dt>
+<dd><p>The line width with which the markers are drawn.</p>
+<p>For filled markers this value is ignored.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_line_width" title="kivy_garden.graph.LineAndMarkerPlot.marker_line_width"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_line_width</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BoundedNumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.BoundedNumericProperty</span></code></a>
+with a minimum of 0 and defaults to 1.5 dp.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.marker_shape">
+<span class="sig-name descname"><span class="pre">marker_shape</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.marker_shape" title="Permalink to this definition"></a></dt>
+<dd><p>The shape of the marker.</p>
+<dl class="simple">
+<dt>The following values are allowed:</dt><dd><p>None:   no marker
+‘x’:    cross
+‘+’:    plus sign
+‘*’:    asterisk
+‘-’:    horizontal line
+‘|’:    vertical line
+‘&lt;’:    left-pointing open triangle
+‘&gt;’:    right-pointing open triangle
+‘v’:    downward-pointing open triangle
+‘^’:    upward-pointing open triangle
+‘o’:    circle
+‘s’:    square
+‘d’:    diamond
+‘O’:    filled circle
+‘S’:    filled square
+‘D’:    filled diamond</p>
+</dd>
+</dl>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_shape" title="kivy_garden.graph.LineAndMarkerPlot.marker_shape"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_shape</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.OptionProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.OptionProperty</span></code></a>
+and defaults to None.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.marker_size">
+<span class="sig-name descname"><span class="pre">marker_size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.marker_size" title="Permalink to this definition"></a></dt>
+<dd><p>Size of a single marker as the side length of a surrounding square.</p>
+<p>For markers, that are drawn as a line, e. g. ‘o’ or ‘s’ markers, the actual
+outermost size will be <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_size" title="kivy_garden.graph.LineAndMarkerPlot.marker_size"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_size</span></code></a> + 2 * <a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_line_width" title="kivy_garden.graph.LineAndMarkerPlot.marker_line_width"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_line_width</span></code></a>, because
+half the line will exceed the square defined by marker_size * marker_size.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.LineAndMarkerPlot.marker_size" title="kivy_garden.graph.LineAndMarkerPlot.marker_size"><code class="xref py py-data docutils literal notranslate"><span class="pre">marker_size</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.BoundedNumericProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy.properties.BoundedNumericProperty</span></code></a>
+with a minimum of 0 and defaults to 12 dp.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LineAndMarkerPlot.simplify_points">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">simplify_points</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LineAndMarkerPlot.simplify_points" title="Permalink to this definition"></a></dt>
+<dd><p>Delete points in a list that lie exactly on the line connecting it’s two adjacent points.</p>
+<p>This is needed due to a bug in class´SmoothLine´.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">LinePlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>LinePlot draws using a standard Line object.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.line_width">
+<span class="sig-name descname"><span class="pre">line_width</span></span><a class="headerlink" href="#kivy_garden.graph.LinePlot.line_width" title="Permalink to this definition"></a></dt>
+<dd><p>NumericProperty(defaultvalue=0, <a href="#id12"><span class="problematic" id="id13">**</span></a>kw)
+Property that represents a numeric value.</p>
+<blockquote>
+<div><p>It only accepts the int or float numeric data type or a string that can be
+converted to a number as shown below. For other numeric types use ObjectProperty
+or use errorhandler to convert it to an int/float.</p>
+<p>It does not support numpy numbers so they must be manually converted to int/float.
+E.g. <code class="docutils literal notranslate"><span class="pre">widget.num</span> <span class="pre">=</span> <span class="pre">np.arange(4)[0]</span></code> will raise an exception. Numpy arrays are not
+supported at all, even by ObjectProperty because their comparision does not return
+a bool. But if you must use a Kivy property, use a ObjectProperty with <code class="docutils literal notranslate"><span class="pre">comparator</span></code>
+set to <code class="docutils literal notranslate"><span class="pre">np.array_equal</span></code>. E.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">A</span><span class="p">(</span><span class="n">EventDispatcher</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">data</span> <span class="o">=</span> <span class="n">ObjectProperty</span><span class="p">(</span><span class="n">comparator</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">A</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="nb">print</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="go">&lt;__main__.A object at 0x000001C839B50208&gt; [0 1]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="go">&lt;__main__.A object at 0x000001C839B50208&gt; [0 1 2]</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: int or float, defaults to 0</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">wid</span> <span class="o">=</span> <span class="n">Widget</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wid</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="mi">42</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">wid</span><span class="o">.</span><span class="n">x</span><span class="p">)</span>
+<span class="go">42</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wid</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="s2">&quot;plop&quot;</span>
+<span class="go"> Traceback (most recent call last):</span>
+<span class="go">   File &quot;&lt;stdin&gt;&quot;, line 1, in &lt;module&gt;</span>
+<span class="go">   File &quot;properties.pyx&quot;, line 93, in kivy.properties.Property.__set__</span>
+<span class="go">   File &quot;properties.pyx&quot;, line 111, in kivy.properties.Property.set</span>
+<span class="go">   File &quot;properties.pyx&quot;, line 159, in kivy.properties.NumericProperty.check</span>
+<span class="go"> ValueError: NumericProperty accept only int/float</span>
+</pre></div>
+</div>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 1.4.1: </span>NumericProperty can now accept custom text and tuple value to indicate a
+type, like “in”, “pt”, “px”, “cm”, “mm”, in the format: ‘10pt’ or (10,
+‘pt’).</p>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.LinePlot.on_line_width">
+<span class="sig-name descname"><span class="pre">on_line_width</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">largs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.LinePlot.on_line_width" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">MeshLinePlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>MeshLinePlot class which displays a set of points similar to a mesh.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.mode">
+<span class="sig-name descname"><span class="pre">mode</span></span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.mode" title="Permalink to this definition"></a></dt>
+<dd><p>VBO Mode used for drawing the points. Can be one of: ‘points’,
+‘line_strip’, ‘line_loop’, ‘lines’, ‘triangle_strip’, ‘triangle_fan’.
+See <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.graphics.html#kivy.graphics.Mesh" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mesh</span></code></a> for more details.</p>
+<p>Defaults to ‘line_strip’.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.plot_mesh">
+<span class="sig-name descname"><span class="pre">plot_mesh</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.plot_mesh" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshLinePlot.set_mesh_size">
+<span class="sig-name descname"><span class="pre">set_mesh_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshLinePlot.set_mesh_size" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshStemPlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">MeshStemPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshStemPlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.MeshLinePlot" title="kivy_garden.graph.MeshLinePlot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.MeshLinePlot</span></code></a></p>
+<p>MeshStemPlot uses the MeshLinePlot class to draw a stem plot. The data
+provided is graphed from origin to the data point.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.MeshStemPlot.plot_mesh">
+<span class="sig-name descname"><span class="pre">plot_mesh</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.MeshStemPlot.plot_mesh" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">Plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">kivy._event.EventDispatcher</span></code></p>
+<p>Plot class, see module documentation for more information.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Events</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>on_clear_plot</cite></dt><dd><p>Fired before a plot updates the display and lets the fbo know that
+it should clear the old drawings.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>..versionadded:: 0.4</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.color">
+<span class="sig-name descname"><span class="pre">color</span></span><a class="headerlink" href="#kivy_garden.graph.Plot.color" title="Permalink to this definition"></a></dt>
+<dd><p>Color of the plot.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">largs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.funcx">
+<span class="sig-name descname"><span class="pre">funcx</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.funcx" title="Permalink to this definition"></a></dt>
+<dd><p>Return a function that convert or not the X value according to plot
+prameters</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.funcy">
+<span class="sig-name descname"><span class="pre">funcy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.funcy" title="Permalink to this definition"></a></dt>
+<dd><p>Return a function that convert or not the Y value according to plot
+prameters</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.get_drawings">
+<span class="sig-name descname"><span class="pre">get_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.get_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>returns a list of canvas instructions that will be added to the
+graph’s canvas.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.get_group">
+<span class="sig-name descname"><span class="pre">get_group</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.get_group" title="Permalink to this definition"></a></dt>
+<dd><p>returns a string which is unique and is the group name given to all
+the instructions returned by _get_drawings. Graph uses this to remove
+these instructions when needed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.get_px_bounds">
+<span class="sig-name descname"><span class="pre">get_px_bounds</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.get_px_bounds" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a dict containing the pixels bounds from the plot parameters.
+The returned values are relative to the graph pos.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.iterate_points">
+<span class="sig-name descname"><span class="pre">iterate_points</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.iterate_points" title="Permalink to this definition"></a></dt>
+<dd><p>Iterate on all the points adjusted to the graph settings</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.on_clear_plot">
+<span class="sig-name descname"><span class="pre">on_clear_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">largs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.on_clear_plot" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.params">
+<span class="sig-name descname"><span class="pre">params</span></span><a class="headerlink" href="#kivy_garden.graph.Plot.params" title="Permalink to this definition"></a></dt>
+<dd><p>DictProperty(defaultvalue=0, rebind=False, <a href="#id14"><span class="problematic" id="id15">**</span></a>kw)
+Property that represents a dict.</p>
+<blockquote>
+<div><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><cite>defaultvalue</cite>: dict, defaults to {}</dt><dd><p>Specifies the default value of the property.</p>
+</dd>
+<dt><cite>rebind</cite>: bool, defaults to False</dt><dd><p>See <code class="xref py py-class docutils literal notranslate"><span class="pre">ObjectProperty</span></code> for details.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="versionchanged">
+<p><span class="versionmodified changed">Changed in version 1.9.0: </span><cite>rebind</cite> has been introduced.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Similar to <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code>, when assigning a dict to a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DictProperty</span></code>, the dict stored in the property is a shallow copy of the
+dict and not the original dict. See <code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code> for details.</p>
+</div>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.points">
+<span class="sig-name descname"><span class="pre">points</span></span><a class="headerlink" href="#kivy_garden.graph.Plot.points" title="Permalink to this definition"></a></dt>
+<dd><p>List of (x, y) points to be displayed in the plot.</p>
+<p>The elements of points are 2-tuples, (x, y). The points are displayed
+based on the mode setting.</p>
+<p><a class="reference internal" href="#kivy_garden.graph.Plot.points" title="kivy_garden.graph.Plot.points"><code class="xref py py-data docutils literal notranslate"><span class="pre">points</span></code></a> is a <a class="reference external" href="https://kivy.org/doc/stable/api-kivy.properties.html#kivy.properties.ListProperty" title="(in Kivy v2.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ListProperty</span></code></a>, defaults to
+[].</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.unproject">
+<span class="sig-name descname"><span class="pre">unproject</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.unproject" title="Permalink to this definition"></a></dt>
+<dd><p>Return a function that unproject a pixel to a X/Y value on the plot
+(works only for linear, not log yet). <cite>x</cite>, <cite>y</cite>, is relative to the
+graph pos, so the graph’s pos needs to be subtracted from x, y before
+passing it in.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xlog</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xmin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xmax</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylog</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ymin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ymax</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.update" title="Permalink to this definition"></a></dt>
+<dd><p>Called by graph whenever any of the parameters
+change. The plot should be recalculated then.
+log, min, max indicate the axis settings.
+size a 4-tuple describing the bounding box in which we can draw
+graphs, it’s (x0, y0, x1, y1), which correspond with the bottom left
+and top right corner locations, respectively.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.x_axis">
+<span class="sig-name descname"><span class="pre">x_axis</span></span><a class="headerlink" href="#kivy_garden.graph.Plot.x_axis" title="Permalink to this definition"></a></dt>
+<dd><p>Index of the X axis to use, defaults to 0</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.x_px">
+<span class="sig-name descname"><span class="pre">x_px</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.x_px" title="Permalink to this definition"></a></dt>
+<dd><p>Return a function that convert the X value of the graph to the
+pixel coordinate on the plot, according to the plot settings and axis
+settings. It’s relative to the graph pos.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.y_axis">
+<span class="sig-name descname"><span class="pre">y_axis</span></span><a class="headerlink" href="#kivy_garden.graph.Plot.y_axis" title="Permalink to this definition"></a></dt>
+<dd><p>Index of the Y axis to use, defaults to 0</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.Plot.y_px">
+<span class="sig-name descname"><span class="pre">y_px</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.Plot.y_px" title="Permalink to this definition"></a></dt>
+<dd><p>Return a function that convert the Y value of the graph to the
+pixel coordinate on the plot, according to the plot settings and axis
+settings. The returned value is relative to the graph pos.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">PointPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.PointPlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>Displays a set of points.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.PointPlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.PointPlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.PointPlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.PointPlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.PointPlot.point_size">
+<span class="sig-name descname"><span class="pre">point_size</span></span><a class="headerlink" href="#kivy_garden.graph.PointPlot.point_size" title="Permalink to this definition"></a></dt>
+<dd><p>Defaults to 1.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">ScatterPlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>ScatterPlot draws using a standard Point object.
+The pointsize can be controlled with <a class="reference internal" href="#kivy_garden.graph.ScatterPlot.point_size" title="kivy_garden.graph.ScatterPlot.point_size"><code class="xref py py-attr docutils literal notranslate"><span class="pre">point_size</span></code></a>.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">plot</span> <span class="o">=</span> <span class="n">ScatterPlot</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">point_size</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.on_point_size">
+<span class="sig-name descname"><span class="pre">on_point_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">largs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.on_point_size" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.ScatterPlot.point_size">
+<span class="sig-name descname"><span class="pre">point_size</span></span><a class="headerlink" href="#kivy_garden.graph.ScatterPlot.point_size" title="Permalink to this definition"></a></dt>
+<dd><p>The point size of the scatter points. Defaults to 1.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">kivy_garden.graph.</span></span><span class="sig-name descname"><span class="pre">SmoothLinePlot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#kivy_garden.graph.Plot" title="kivy_garden.graph.Plot"><code class="xref py py-class docutils literal notranslate"><span class="pre">kivy_garden.graph.Plot</span></code></a></p>
+<p>Smooth Plot class, see module documentation for more information.
+This plot use a specific Fragment shader for a custom anti aliasing.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.GRADIENT_DATA">
+<span class="sig-name descname"><span class="pre">GRADIENT_DATA</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">b&quot;\x00\x00\x00\x07\x07\x07\x0f\x0f\x0f\x17\x17\x17\x1f\x1f\x1f'''///777???GGGOOOWWW___gggooowww\x7f\x7f\x7f\x87\x87\x87\x8f\x8f\x8f\x97\x97\x97\x9f\x9f\x9f\xa7\xa7\xa7\xaf\xaf\xaf\xb7\xb7\xb7\xbf\xbf\xbf\xc7\xc7\xc7\xcf\xcf\xcf\xd7\xd7\xd7\xdf\xdf\xdf\xe7\xe7\xe7\xef\xef\xef\xf7\xf7\xf7\xff\xff\xff\xf6\xf6\xf6\xee\xee\xee\xe6\xe6\xe6\xde\xde\xde\xd5\xd5\xd5\xcd\xcd\xcd\xc5\xc5\xc5\xbd\xbd\xbd\xb4\xb4\xb4\xac\xac\xac\xa4\xa4\xa4\x9c\x9c\x9c\x94\x94\x94\x8b\x8b\x8b\x83\x83\x83{{{sssjjjbbbZZZRRRJJJAAA999111)))</span>&#160;&#160; <span class="pre">\x18\x18\x18\x10\x10\x10\x08\x08\x08\x00\x00\x00&quot;</span></em><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.GRADIENT_DATA" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.SMOOTH_FS">
+<span class="sig-name descname"><span class="pre">SMOOTH_FS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\n</span>&#160;&#160;&#160; <span class="pre">$HEADER$\n\n</span>&#160;&#160;&#160; <span class="pre">void</span> <span class="pre">main(void)</span> <span class="pre">{\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">float</span> <span class="pre">edgewidth</span> <span class="pre">=</span> <span class="pre">0.015625</span> <span class="pre">*</span> <span class="pre">64.;\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">float</span> <span class="pre">t</span> <span class="pre">=</span> <span class="pre">texture2D(texture0,</span> <span class="pre">tex_coord0).r;\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">float</span> <span class="pre">e</span> <span class="pre">=</span> <span class="pre">smoothstep(0.,</span> <span class="pre">edgewidth,</span> <span class="pre">t);\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">gl_FragColor</span> <span class="pre">=</span> <span class="pre">frag_color</span> <span class="pre">*</span> <span class="pre">vec4(1,</span> <span class="pre">1,</span> <span class="pre">1,</span> <span class="pre">e);\n</span>&#160;&#160;&#160; <span class="pre">}\n</span>&#160;&#160;&#160; <span class="pre">'</span></em><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.SMOOTH_FS" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.create_drawings">
+<span class="sig-name descname"><span class="pre">create_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.create_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called once to create all the canvas instructions needed for the
+plot</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.create_legend_drawings">
+<span class="sig-name descname"><span class="pre">create_legend_drawings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.create_legend_drawings" title="Permalink to this definition"></a></dt>
+<dd><p>called when a legend is added containing this plot. return drawing instructions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.draw" title="Permalink to this definition"></a></dt>
+<dd><p>draw the plot according to the params. It dispatches on_clear_plot
+so derived classes should call super before updating.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kivy_garden.graph.SmoothLinePlot.draw_legend">
+<span class="sig-name descname"><span class="pre">draw_legend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">center</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#kivy_garden.graph.SmoothLinePlot.draw_legend" title="Permalink to this definition"></a></dt>
+<dd><p>draw the legend representation.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="api.html" class="btn btn-neutral float-left" title="The Graph API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019, Kivy.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
