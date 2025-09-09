@@ -54,43 +54,46 @@ __all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'LinePlot',
            'SmoothLinePlot', 'ContourPlot', 'ScatterPlot', 'PointPlot',
            'LineAndMarkerPlot')
 
+from decimal import Decimal
+from itertools import chain
+from math import log10, floor, ceil, sqrt
 from typing import Optional, List, Tuple, Any, Callable, Union
+import weakref
 
+from kivy import metrics
+from kivy.clock import Clock
+from kivy.event import EventDispatcher
+from kivy.graphics import Color, Ellipse, Fbo, Line,  Mesh, Point, RenderContext,Rectangle, SmoothLine
 from kivy.graphics.instructions import InstructionGroup, Instruction
-from kivy.graphics.vertex_instructions import Line, SmoothLine, Ellipse
-from kivy.metrics import dp, sp
+from kivy.graphics.texture import Texture
+# from kivy.graphics.vertex_instructions import Line, SmoothLine, Ellipse
+from kivy.lang import Builder
+from kivy.logger import Logger
+from kivy.metrics import dp
+from kivy.properties import (NumericProperty, BooleanProperty,
+    BoundedNumericProperty, StringProperty, ListProperty, ObjectProperty,
+    DictProperty, AliasProperty, ReferenceListProperty, ColorProperty,
+    OptionProperty)
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.stencilview import StencilView
-from kivy.properties import NumericProperty, BooleanProperty, \
-    BoundedNumericProperty, StringProperty, ListProperty, ObjectProperty, \
-    DictProperty, AliasProperty, ReferenceListProperty, ColorProperty, \
-    OptionProperty
-from kivy.clock import Clock
-from kivy.graphics import Mesh, Color, Rectangle, Point
-from kivy.graphics import Fbo
-from kivy.graphics.texture import Texture
-from kivy.event import EventDispatcher
-from kivy.lang import Builder
-from kivy.logger import Logger
-from kivy import metrics
-from math import log10, floor, ceil, sqrt
-from decimal import Decimal
-from itertools import chain
+
 try:
     import numpy as np
-except ImportError as e:
+except ImportError:
     np = None
 
 from ._version import __version__
 
 
 def identity(x):
+    """Return the input value unchanged."""
     return x
 
 
 def exp10(x):
+    """Return 10 raised to the power of x."""
     return 10 ** x
 
 
@@ -108,18 +111,22 @@ Builder.load_string("""
 
 
 class GraphRotatedLabel(Label):
+    """Label widget that can be rotated by a specified angle."""
     angle = NumericProperty(0)
 
 
 class Axis(EventDispatcher):
+    """Base class for graph axes."""
     pass
 
 
 class XAxis(Axis):
+    """X-axis representation."""
     pass
 
 
 class YAxis(Axis):
+    """Y-axis representation."""
     pass
 
 
@@ -177,160 +184,163 @@ class GraphLegend(BoxLayout):
 
     marker_width = BoundedNumericProperty(dp(20), min=0)
     """Maximum width of the markers in the legend.
-    
+
     Each marker displayed in the legend is of the same size as the plot's markers,
     but with this value as a maximum width. For line plots, this will be the length of the
     line displayed in the legend.
-    
-    Negative values are not allowed. 
-    
+
+    Negative values are not allowed.
+
     :data:`marker_width` is a :class:`kivy.properties.BoundedNumericProperty`,
     defaults to 20 dp.
     """
 
     marker_height = BoundedNumericProperty(dp(12), min=0)
     """Maximum height of the markers in the legend.
-    
+
     Each marker displayed in the legend is of the same size as the plot's markers,
     but with this value as a maximum height.
-    
+
     Negative values are not allowed.
-    
+
     :data:`marker_height` is a :class:`kivy.properties.BoundedNumericProperty`,
     defaults to 12 dp.
     """
 
     marker_size = ReferenceListProperty(marker_width, marker_height)
     """Maximum size of the markers in the legend.
-    
+
     :data:`marker_size` is a :class:`kivy.properties.ReferenceListProperty` of
     (:data:`marker_width`, :data:`marker_height`) properties.
     """
 
 
 class Graph(Widget):
-    '''Graph class, see module documentation for more information.
-    '''
+    """Graph class, see module documentation for more information."""
 
-    # triggers a full reload of graphics
-    _trigger = ObjectProperty(None)
-    # triggers only a repositioning of objects due to size/pos updates
-    _trigger_size = ObjectProperty(None)
-    # triggers only a update of colors, e.g. tick_color
-    _trigger_color = ObjectProperty(None)
-    # holds widget with the x-axis label
-    _xlabel = ObjectProperty(None, allownone=True)
-    # holds widget with the y-axis label
-    _ylabel = ObjectProperty(None, allownone=True)
-    # holds all the x-axis tick mark labels
-    _x_grid_label = ListProperty([])
-    # holds all the y-axis tick mark labels
-    _y_grid_label = ListProperty([])
-    # the mesh drawing all the ticks/grids
-    _mesh_ticks = ObjectProperty(None)
-    # the mesh which draws the surrounding rectangle
-    _mesh_rect = ObjectProperty(None)
-    # a list of locations of major and minor ticks. The values are not
-    # but is in the axis min - max range
+    # Triggers for different update types
+    _trigger = ObjectProperty(None)  # Full graphics reload
+    _trigger_size = ObjectProperty(None)  # Size/position updates only
+    _trigger_color = ObjectProperty(None)  # Color updates only
+
+    # Widget references for labels
+    _xlabel = ObjectProperty(None, allownone=True)  # X-axis label widget
+    _ylabel = ObjectProperty(None, allownone=True)  # Y-axis label widget
+    _x_grid_label = ListProperty([])  # X-axis tick mark labels
+    _y_grid_label = ListProperty([])  # Y-axis tick mark labels
+
+    # Mesh objects for drawing
+    _mesh_ticks = ObjectProperty(None)  # Mesh for ticks/grids
+    _mesh_rect = ObjectProperty(None)  # Mesh for surrounding rectangle
+
+    # Tick locations (in axis min-max range)
     _ticks_majorx = ListProperty([])
     _ticks_minorx = ListProperty([])
     _ticks_majory = ListProperty([])
     _ticks_minory = ListProperty([])
 
+    # Color properties
     tick_color = ListProperty([.25, .25, .25, 1])
-    '''Color of the grid/ticks, default to 1/4. grey.
-    '''
+    """Color of the grid/ticks, default to 1/4 grey."""
 
     background_color = ListProperty([0, 0, 0, 0])
-    '''Color of the background, defaults to transparent
-    '''
+    """Color of the background, defaults to transparent."""
 
     border_color = ListProperty([1, 1, 1, 1])
-    '''Color of the border, defaults to white
-    '''
+    """Color of the border, defaults to white."""
 
+    # Label configuration properties
     label_options = DictProperty()
-    '''Label options that will be passed to `:class:`kivy.uix.Label`.
-    
+    """Label options that will be passed to :class:`kivy.uix.Label`.
+
     These options are applied to axis labels, tick labels and legend labels,
     if not overwritten by :data:`tick_label_options` or :data:`legend_label_options`
     respectively.
-    
+
     :data:`label_options` is an :class:`kivy.properties.DictProperty`
     and defaults to the empty dict.
-    '''
+    """
 
     tick_label_options = DictProperty()
-    '''Additional label options for the tick labels.
-    
+    """Additional label options for the tick labels.
+
     These options are applied to tick labels and do overwrite the values in
     :data:`label_options` for the tick labels.
-    
+
     :data:`tick_label_options` is an :class:`kivy.properties.DictProperty`
     and defaults to the empty dict.
-    '''
+    """
 
     legend_label_options = DictProperty()
-    '''Additional label options for the legend labels.
-    
+    """Additional label options for the legend labels.
+
     These options are applied to legend labels and do overwrite the values in
     :data:`label_options` for the legend labels.
-    
+
     :data:`legend_label_options` is an :class:`kivy.properties.DictProperty`
     and defaults to the empty dict.
-    '''
+    """
 
     def _get_legend(self):
+        """Get the current legend."""
         return self._legend
 
     def _set_legend(self, legend: Union[Tuple[str, Any], None]):
+        """Set or update the legend with plot data."""
         if legend and self._legend:
+            # Clear existing legend children
             while self._legend.children:
-                self._legend.remove_widget(self.legend.children[0])
+                self._legend.remove_widget(self._legend.children[0])
         elif legend:
+            # Create new legend
             self._legend = GraphLegend()
-            self._legend.bind(pos=self._trigger_legend, size=self._trigger_legend, pos_hint=self._trigger_legend,
-                              marker_size=self._trigger_legend)
+            self._legend.bind(pos=self._trigger_legend, size=self._trigger_legend,
+                            pos_hint=self._trigger_legend, marker_size=self._trigger_legend)
             self.add_widget(self._legend)
         elif self._legend:
+            # Remove existing legend
             self.remove_widget(self._legend)
             self._legend = None
             self._legend_plots = []
             return True
         else:
             return False
+
+        # Build legend content
         self._legend_plots = []
         self._legend.canvas.clear()
+
         for name, plot in legend:
+            # Create label with combined options
             options = self.label_options.copy()
             options.update(**self.legend_label_options)
             label = Label(text=name, **options, size_hint=(None, None))
-            def set_size(instance, size):
-                instance.size = size
-            label.bind(texture_size=set_size)
+            label.bind(texture_size=lambda instance, size: setattr(instance, 'size', size))
+
+            # Add plot drawings to legend
             drawings = plot.create_legend_drawings()
             for drawing in drawings:
                 self._legend.canvas.add(drawing)
+
             self._legend_plots.append(plot)
             self._legend.add_widget(label)
         return True
 
     legend: Union[List[Tuple[str, Any]], GraphLegend] = AliasProperty(_get_legend, _set_legend)
     """Legend of graph's plots.
-    
+
     You set the legend with an iterable yielding tuples containing the name
     and :class:`Plot` instance, you want to be displayed.
     Getting the legend returns an instance of :class:`GraphLegend`.
-    
+
     See the :class:`GraphLegend` class documentation for a usage example.
-    
+
     :data:`legend` is a :class:`~kivy.properties.AliasProperty`,
     defaults to None.
     """
 
     _with_stencilbuffer = BooleanProperty(True)
-    '''Whether :class:`Graph`'s FBO should use FrameBuffer (True) or not
-    (False).
+    """Whether :class:`Graph`'s FBO should use FrameBuffer (True) or not (False).
 
     .. warning:: This property is internal and so should be used with care.
     It can break some other graphic instructions used by the :class:`Graph`,
@@ -339,17 +349,20 @@ class Graph(Widget):
 
     :data:`_with_stencilbuffer` is a :class:`~kivy.properties.BooleanProperty`,
     defaults to True.
-    '''
+    """
 
     def __init__(self, **kwargs):
+        # Initialize legend-related attributes
         self._legend: Optional[GraphLegend] = None
         self._legend_plots: Tuple[Plot, ...] = tuple()
+
         super(Graph, self).__init__(**kwargs)
 
+        # Create FBO for off-screen rendering
         with self.canvas:
-            self._fbo = Fbo(
-                size=self.size, with_stencilbuffer=self._with_stencilbuffer)
+            self._fbo = Fbo(size=self.size, with_stencilbuffer=self._with_stencilbuffer)
 
+        # Set up FBO drawing instructions
         with self._fbo:
             self._background_color = Color(*self.background_color)
             self._background_rect = Rectangle(size=self.size)
@@ -358,35 +371,52 @@ class Graph(Widget):
             self._mesh_rect_color = Color(*self.border_color)
             self._mesh_rect = Mesh(mode='line_strip')
 
+        # Add FBO texture to main canvas
         with self.canvas:
             Color(1, 1, 1)
-            self._fbo_rect = Rectangle(
-                size=self.size, texture=self._fbo.texture)
+            self._fbo_rect = Rectangle(size=self.size, texture=self._fbo.texture)
 
+        # Initialize rectangle mesh
         mesh = self._mesh_rect
         mesh.vertices = [0] * (5 * 4)
         mesh.indices = range(5)
 
+        # Create plot area with stencil clipping
         self._plot_area = StencilView()
         self.add_widget(self._plot_area)
 
-        t = self._trigger = Clock.create_trigger(self._redraw_all)
-        ts = self._trigger_size = Clock.create_trigger(self._redraw_size)
-        tc = self._trigger_color = Clock.create_trigger(self._update_colors)
-        tl = self._trigger_legend = Clock.create_trigger(self._update_legend)
+        # Create update triggers
+        self._trigger = Clock.create_trigger(self._redraw_all)
+        self._trigger_size = Clock.create_trigger(self._redraw_size)
+        self._trigger_color = Clock.create_trigger(self._update_colors)
+        self._trigger_legend = Clock.create_trigger(self._update_legend)
 
-        self.bind(center=ts, padding=ts, precision=ts, plots=ts, x_grid=ts,
-                  y_grid=ts, draw_border=ts)
-        self.bind(xmin=t, xmax=t, xlog=t, x_ticks_major=t, x_ticks_minor=t,
-                  xlabel=t, x_grid_label=t, ymin=t, ymax=t, ylog=t,
-                  y_ticks_major=t, y_ticks_minor=t, ylabel=t, y_grid_label=t,
-                  label_options=t, x_ticks_angle=t,
-                  tick_label_options=t, legend_label_options=t)
-        self.bind(tick_color=tc, background_color=tc, border_color=tc)
-        self.bind(legend=tl, view_pos=tl, view_size=tl, pos=tl)
+        # Bind properties to appropriate triggers
+        self.bind(center=self._trigger_size, padding=self._trigger_size,
+                 precision=self._trigger_size, plots=self._trigger_size,
+                 x_grid=self._trigger_size, y_grid=self._trigger_size,
+                 draw_border=self._trigger_size)
+
+        self.bind(xmin=self._trigger, xmax=self._trigger, xlog=self._trigger,
+                 x_ticks_major=self._trigger, x_ticks_minor=self._trigger,
+                 xlabel=self._trigger, x_grid_label=self._trigger,
+                 ymin=self._trigger, ymax=self._trigger, ylog=self._trigger,
+                 y_ticks_major=self._trigger, y_ticks_minor=self._trigger,
+                 ylabel=self._trigger, y_grid_label=self._trigger,
+                 label_options=self._trigger, x_ticks_angle=self._trigger,
+                 tick_label_options=self._trigger, legend_label_options=self._trigger)
+
+        self.bind(tick_color=self._trigger_color, background_color=self._trigger_color,
+                 border_color=self._trigger_color)
+
+        self.bind(legend=self._trigger_legend, view_pos=self._trigger_legend,
+                 view_size=self._trigger_legend, pos=self._trigger_legend)
+
+        # Initial draw
         self._trigger()
 
     def add_widget(self, widget):
+        """Add widget, handling special case for plot area."""
         if widget is self._plot_area:
             canvas = self.canvas
             self.canvas = self._fbo
@@ -395,6 +425,7 @@ class Graph(Widget):
             self.canvas = canvas
 
     def remove_widget(self, widget):
+        """Remove widget, handling special case for plot area."""
         if widget is self._plot_area:
             canvas = self.canvas
             self.canvas = self._fbo
@@ -403,76 +434,72 @@ class Graph(Widget):
             self.canvas = canvas
 
     def _get_ticks(self, major, minor, log, s_min, s_max):
+        """Calculate tick positions for major and minor ticks."""
+        # Ensure major and minor are same type
         if isinstance(major, (list, tuple)) != isinstance(minor, (list, tuple)):
             minor = type(major)()
+
         points_major = []
         points_minor = []
+
         if isinstance(major, (list, tuple)):
+            # Use provided tick positions
             points_major = [p for p in major if s_min <= p <= s_max or s_min >= p >= s_max]
-            points_minor = [p for p in minor if (s_min <= p <= s_max or s_min >= p >= s_max) and p not in points_major]
+            points_minor = [p for p in minor if (s_min <= p <= s_max or s_min >= p >= s_max)
+                           and p not in points_major]
             if log:
                 points_major = [log10(p) for p in points_major]
                 points_minor = [log10(p) for p in points_minor]
+
         elif major > 0:
             minor = max(minor, 0)
+
             if log and s_max > s_min:
-                s_min = log10(s_min)
-                s_max = log10(s_max)
-                # count the decades in min - max. This is in actual decades,
-                # not logs.
-                n_decades = floor(s_max - s_min)
-                # for the fractional part of the last decade, we need to
-                # convert the log value, x, to 10**x but need to handle
-                # differently if the last incomplete decade has a decade
-                # boundary in it
-                if floor(s_min + n_decades) != floor(s_max):
-                    n_decades += 1 - (10 ** (s_min + n_decades + 1) - 10 **
-                                      s_max) / 10 ** floor(s_max + 1)
+                # Logarithmic scale tick calculation
+                s_min_log = log10(s_min)
+                s_max_log = log10(s_max)
+
+                # Count decades in range
+                n_decades = floor(s_max_log - s_min_log)
+
+                # Handle fractional part of last decade
+                if floor(s_min_log + n_decades) != floor(s_max_log):
+                    n_decades += 1 - (10 ** (s_min_log + n_decades + 1) - 10 ** s_max_log) / 10 ** floor(s_max_log + 1)
                 else:
-                    n_decades += ((10 ** s_max - 10 ** (s_min + n_decades)) /
-                                  10 ** floor(s_max + 1))
-                # this might be larger than what is needed, but we delete
-                # excess later
+                    n_decades += ((10 ** s_max_log - 10 ** (s_min_log + n_decades)) / 10 ** floor(s_max_log + 1))
+
+                # Calculate number of ticks needed
                 n_ticks_major = n_decades / float(major)
-                n_ticks = int(floor(n_ticks_major * (minor if minor >=
-                                                     1. else 1.0))) + 2
-                # in decade multiples, e.g. 0.1 of the decade, the distance
-                # between ticks
+                n_ticks = int(floor(n_ticks_major * (minor if minor >= 1. else 1.0))) + 2
                 decade_dist = major / float(minor if minor else 1.0)
 
                 points_minor = [0] * n_ticks
                 points_major = [0] * n_ticks
-                k = 0  # position in points major
-                k2 = 0  # position in points minor
-                # because each decade is missing 0.1 of the decade, if a tick
-                # falls in < min_pos skip it
+                k = k2 = 0
                 min_pos = 0.1 - 0.00001 * decade_dist
-                s_min_low = floor(s_min)
-                # first real tick location. value is in fractions of decades
-                # from the start we have to use decimals here, otherwise
-                # floating point inaccuracies results in bad values
-                start_dec = ceil((10 ** Decimal(s_min - s_min_low - 1)) /
-                                 Decimal(decade_dist)) * decade_dist
-                count_min = (0 if not minor else
-                             floor(start_dec / decade_dist) % minor)
+                s_min_low = floor(s_min_log)
+
+                # Calculate first tick position
+                start_dec = ceil((10 ** Decimal(s_min_log - s_min_low - 1)) / Decimal(decade_dist)) * decade_dist
+                count_min = (0 if not minor else floor(start_dec / decade_dist) % minor)
                 start_dec += s_min_low
-                count = 0  # number of ticks we currently have passed start
+                count = 0
+
+                # Generate tick positions
                 while True:
-                    # this is the current position in decade that we are.
-                    # e.g. -0.9 means that we're at 0.1 of the 10**ceil(-0.9)
-                    # decade
                     pos_dec = start_dec + decade_dist * count
                     pos_dec_low = floor(pos_dec)
                     diff = pos_dec - pos_dec_low
                     zero = abs(diff) < 0.001 * decade_dist
+
                     if zero:
-                        # the same value as pos_dec but in log scale
                         pos_log = pos_dec_low
                     else:
-                        pos_log = log10((pos_dec - pos_dec_low
-                                         ) * 10 ** ceil(pos_dec))
-                    if pos_log > s_max:
+                        pos_log = log10((pos_dec - pos_dec_low) * 10 ** ceil(pos_dec))
+
+                    if pos_log > s_max_log:
                         break
+
                     count += 1
                     if zero or diff >= min_pos:
                         if minor and not count_min % minor:
@@ -482,16 +509,17 @@ class Graph(Widget):
                             points_minor[k2] = pos_log
                             k2 += 1
                     count_min += 1
+
             elif not log and s_max != s_min:
-                # distance between each tick
+                # Linear scale tick calculation
                 tick_dist = major / float(minor if minor else 1.0)
                 n_ticks = int(floor(abs((s_max - s_min) / tick_dist)) + 1)
                 tick_dist = abs(tick_dist) * (1 if s_min < s_max else -1)
-                points_major = [0] * int(floor(abs((s_max - s_min) / float(major)))
-                                         + 1)
+
+                points_major = [0] * int(floor(abs((s_max - s_min) / float(major))) + 1)
                 points_minor = [0] * (n_ticks - len(points_major) + 1)
-                k = 0  # position in points major
-                k2 = 0  # position in points minor
+                k = k2 = 0
+
                 for m in range(0, n_ticks):
                     if minor and m % minor:
                         points_minor[k2] = m * tick_dist + s_min
@@ -501,70 +529,84 @@ class Graph(Widget):
                         k += 1
             else:
                 k = k2 = 1
+
+            # Trim unused positions
             del points_major[k:]
             del points_minor[k2:]
-        return sorted(points_major, reverse=s_min > s_max),\
-               sorted(points_minor, reverse=s_min > s_max)
+
+        return (sorted(points_major, reverse=s_min > s_max),
+                sorted(points_minor, reverse=s_min > s_max))
 
     def _update_labels(self):
+        """Update position and content of axis labels and tick labels."""
         xlabel = self._xlabel
         ylabel = self._ylabel
-        x = self.x
-        y = self.y
-        width = self.width
-        height = self.height
+        x, y = self.x, self.y
+        width, height = self.width, self.height
         padding = self.padding
+
+        # Calculate initial boundaries
         x_next = padding + x
         y_next = padding + y
         xextent = width + x
         yextent = height + y
-        ymin = self.ymin
-        ymax = self.ymax
-        xmin = self.xmin
+
+        # Get axis parameters
+        ymin, ymax, xmin = self.ymin, self.ymax, self.xmin
         precision = self.precision
-        x_overlap = False
-        y_overlap = False
-        # set up x and y axis labels
+        x_overlap = y_overlap = False
+
+        # Position axis labels
         if xlabel:
             xlabel.text = self.xlabel
             xlabel.texture_update()
             xlabel.size = xlabel.texture_size
-            xlabel.pos = int(
-                x + width / 2. - xlabel.width / 2.), int(padding + y)
+            xlabel.pos = (int(x + width / 2. - xlabel.width / 2.), int(padding + y))
             y_next += padding + xlabel.height
+
         if ylabel:
             ylabel.text = self.ylabel
             ylabel.texture_update()
             ylabel.size = ylabel.texture_size
             ylabel.x = padding + x - (ylabel.width / 2. - ylabel.height / 2.)
             x_next += padding + ylabel.height
+
+        # Get tick data
         xpoints = self._ticks_majorx
         xlabels = self._x_grid_label
         xlabel_grid = self.x_grid_label
         ylabel_grid = self.y_grid_label
         ypoints = self._ticks_majory
         ylabels = self._y_grid_label
-        # now x and y tick mark labels
+
+        # Update Y-axis tick labels
         if len(ylabels) and ylabel_grid:
-            # horizontal size of the largest tick label, to have enough room
             funcexp = exp10 if self.ylog else identity
             funclog = log10 if self.ylog else identity
-            get_text = \
-                (lambda _k: self.y_grid_label(funcexp(ypoints[_k]))) if isinstance(self.y_grid_label, Callable) else \
-                self.y_grid_label.__getitem__ if isinstance(self.y_grid_label, (tuple, list, str)) else \
-                lambda _k: precision % funcexp(ypoints[_k])
+
+            # Determine text generation function
+            if isinstance(self.y_grid_label, Callable):
+                get_text = lambda k: self.y_grid_label(funcexp(ypoints[k]))
+            elif isinstance(self.y_grid_label, (tuple, list, str)):
+                get_text = self.y_grid_label.__getitem__
+            else:
+                get_text = lambda k: precision % funcexp(ypoints[k])
+
+            # Calculate label dimensions and positions
             ylabels[0].text = get_text(0)
             ylabels[0].texture_update()
             y1 = ylabels[0].texture_size
-            y_start = y_next + (padding + y1[1] if len(xlabels) and xlabel_grid
-                                else 0) + \
-                               (padding + y1[1] if not y_next else 0)
+
+            y_start = y_next + (padding + y1[1] if len(xlabels) and xlabel_grid else 0) + \
+                     (padding + y1[1] if not y_next else 0)
             yextent = y + height - padding - y1[1] / 2.
 
-            ymin = funclog(ymin)
-            ratio = (yextent - y_start) / float(funclog(ymax) - ymin)
+            ymin_log = funclog(ymin)
+            ratio = (yextent - y_start) / float(funclog(ymax) - ymin_log)
             y_start -= y1[1] / 2.
             y1 = y1[0]
+
+            # Update all Y labels
             for k in range(len(ylabels)):
                 try:
                     ylabels[k].text = get_text(k)
@@ -573,231 +615,242 @@ class Graph(Widget):
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
+
             for k in range(len(ylabels)):
-                ylabels[k].pos = (
-                    int(x_next) - ylabels[k].width + y1,
-                    int(y_start + (ypoints[k] - ymin) * ratio))
+                ylabels[k].pos = (int(x_next) - ylabels[k].width + y1,
+                                int(y_start + (ypoints[k] - ymin_log) * ratio))
+
+            # Check for overlap
             if len(ylabels) > 1 and ylabels[0].top > ylabels[1].y:
                 y_overlap = True
             else:
                 x_next += y1 + padding
+
+        # Update X-axis tick labels
         if len(xlabels) and xlabel_grid:
             funcexp = exp10 if self.xlog else identity
             funclog = log10 if self.xlog else identity
-            get_text = \
-                (lambda _k: self.x_grid_label(funcexp(xpoints[_k]))) if isinstance(self.x_grid_label, Callable) else \
-                self.x_grid_label.__getitem__ if isinstance(self.x_grid_label, (tuple, list, str)) else \
-                lambda _k: precision % funcexp(xpoints[_k])
-            # find the distance from the end that'll fit the last tick label
+
+            # Determine text generation function
+            if isinstance(self.x_grid_label, Callable):
+                get_text = lambda k: self.x_grid_label(funcexp(xpoints[k]))
+            elif isinstance(self.x_grid_label, (tuple, list, str)):
+                get_text = self.x_grid_label.__getitem__
+            else:
+                get_text = lambda k: precision % funcexp(xpoints[k])
+
+            # Calculate boundaries for X labels
             xlabels[0].text = get_text(-1)
             xlabels[0].texture_update()
             xextent = x + width - xlabels[0].texture_size[0] / 2. - padding
-            # find the distance from the start that'll fit the first tick label
+
             if not x_next:
                 xlabels[0].text = get_text(0)
                 xlabels[0].texture_update()
                 x_next = padding + xlabels[0].texture_size[0] / 2.
-            xmin = funclog(xmin)
-            ratio = (xextent - x_next) / float(funclog(self.xmax) - xmin)
+
+            xmin_log = funclog(xmin)
+            ratio = (xextent - x_next) / float(funclog(self.xmax) - xmin_log)
             right = -1
+
+            # Position X labels and check for overlap
             for k in range(len(xlabels)):
                 try:
                     xlabels[k].text = get_text(k)
                 except IndexError:
                     pass
-                # update the size so we can center the labels on ticks
+
                 xlabels[k].texture_update()
                 xlabels[k].size = xlabels[k].texture_size
                 half_ts = xlabels[k].texture_size[0] / 2.
-                xlabels[k].pos = (
-                    int(x_next + (xpoints[k] - xmin) * ratio - half_ts),
-                    int(y_next))
+                xlabels[k].pos = (int(x_next + (xpoints[k] - xmin_log) * ratio - half_ts),
+                                int(y_next))
+
                 if xlabels[k].x < right:
                     x_overlap = True
                     break
                 right = xlabels[k].right
+
             if not x_overlap:
                 y_next += padding + xlabels[0].texture_size[1]
-        # now re-center the x and y axis labels
+
+        # Re-center axis labels
         if xlabel:
-            xlabel.x = int(
-                x_next + (xextent - x_next) / 2. - xlabel.width / 2.)
+            xlabel.x = int(x_next + (xextent - x_next) / 2. - xlabel.width / 2.)
         if ylabel:
-            ylabel.y = int(
-                y_next + (yextent - y_next) / 2. - ylabel.height / 2.)
+            ylabel.y = int(y_next + (yextent - y_next) / 2. - ylabel.height / 2.)
             ylabel.angle = 90
+
+        # Hide overlapping labels
         if x_overlap:
             for k in range(len(xlabels)):
                 xlabels[k].text = ''
         if y_overlap:
             for k in range(len(ylabels)):
                 ylabels[k].text = ''
+
         return x_next - x, y_next - y, xextent - x, yextent - y
 
     def _update_ticks(self, size):
-        # re-compute the positions of the bounding rectangle
+        """Update tick and grid line positions."""
+        # Update border rectangle
         mesh = self._mesh_rect
         vert = mesh.vertices
+
         if self.draw_border:
             s0, s1, s2, s3 = size
-            vert[0] = s0
-            vert[1] = s1
-            vert[4] = s2
-            vert[5] = s1
-            vert[8] = s2
-            vert[9] = s3
-            vert[12] = s0
-            vert[13] = s3
-            vert[16] = s0
-            vert[17] = s1
+            vert[0:20] = [s0, s1, s2, s1, s2, s3, s0, s3, s0, s1] * 2
         else:
-            vert[0:18] = [0 for k in range(18)]
+            vert[0:18] = [0] * 18
         mesh.vertices = vert
-        # re-compute the positions of the x/y axis ticks
+
+        # Update tick positions
         mesh = self._mesh_ticks
         vert = mesh.vertices
         start = 0
-        xpoints = self._ticks_majorx
-        ypoints = self._ticks_majory
-        xpoints2 = self._ticks_minorx
-        ypoints2 = self._ticks_minory
-        ylog = self.ylog
-        xlog = self.xlog
-        xmin = self.xmin
-        xmax = self.xmax
+
+        # Get tick arrays and axis parameters
+        xpoints, ypoints = self._ticks_majorx, self._ticks_majory
+        xpoints2, ypoints2 = self._ticks_minorx, self._ticks_minory
+        ylog, xlog = self.ylog, self.xlog
+        xmin, xmax = self.xmin, self.xmax
+        ymin, ymax = self.ymin, self.ymax
+
+        # Convert to log scale if needed
         if xlog:
-            xmin = log10(xmin)
-            xmax = log10(xmax)
-        ymin = self.ymin
-        ymax = self.ymax
+            xmin, xmax = log10(xmin), log10(xmax)
         if ylog:
-            ymin = log10(ymin)
-            ymax = log10(ymax)
+            ymin, ymax = log10(ymin), log10(ymax)
+
+        # Draw major X ticks
         if len(xpoints):
             top = size[3] if self.x_grid else metrics.dp(12) + size[1]
             ratio = (size[2] - size[0]) / float(xmax - xmin)
             for k in range(start, len(xpoints) + start):
-                vert[k * 8] = size[0] + (xpoints[k - start] - xmin) * ratio
-                vert[k * 8 + 1] = size[1]
-                vert[k * 8 + 4] = vert[k * 8]
-                vert[k * 8 + 5] = top
+                x_pos = size[0] + (xpoints[k - start] - xmin) * ratio
+                vert[k * 8:k * 8 + 8] = [x_pos, size[1], 0, 0, x_pos, top, 0, 0]
             start += len(xpoints)
+
+        # Draw minor X ticks
         if len(xpoints2):
             top = metrics.dp(8) + size[1]
             ratio = (size[2] - size[0]) / float(xmax - xmin)
             for k in range(start, len(xpoints2) + start):
-                vert[k * 8] = size[0] + (xpoints2[k - start] - xmin) * ratio
-                vert[k * 8 + 1] = size[1]
-                vert[k * 8 + 4] = vert[k * 8]
-                vert[k * 8 + 5] = top
+                x_pos = size[0] + (xpoints2[k - start] - xmin) * ratio
+                vert[k * 8:k * 8 + 8] = [x_pos, size[1], 0, 0, x_pos, top, 0, 0]
             start += len(xpoints2)
+
+        # Draw major Y ticks
         if len(ypoints):
             top = size[2] if self.y_grid else metrics.dp(12) + size[0]
             ratio = (size[3] - size[1]) / float(ymax - ymin)
             for k in range(start, len(ypoints) + start):
-                vert[k * 8 + 1] = size[1] + (ypoints[k - start] - ymin) * ratio
-                vert[k * 8 + 5] = vert[k * 8 + 1]
-                vert[k * 8] = size[0]
-                vert[k * 8 + 4] = top
+                y_pos = size[1] + (ypoints[k - start] - ymin) * ratio
+                vert[k * 8:k * 8 + 8] = [size[0], y_pos, 0, 0, top, y_pos, 0, 0]
             start += len(ypoints)
+
+        # Draw minor Y ticks
         if len(ypoints2):
             top = metrics.dp(8) + size[0]
             ratio = (size[3] - size[1]) / float(ymax - ymin)
             for k in range(start, len(ypoints2) + start):
-                vert[k * 8 + 1] = size[1] + (
-                    ypoints2[k - start] - ymin) * ratio
-                vert[k * 8 + 5] = vert[k * 8 + 1]
-                vert[k * 8] = size[0]
-                vert[k * 8 + 4] = top
+                y_pos = size[1] + (ypoints2[k - start] - ymin) * ratio
+                vert[k * 8:k * 8 + 8] = [size[0], y_pos, 0, 0, top, y_pos, 0, 0]
+
         mesh.vertices = vert
 
+    # Axis management properties
     x_axis = ListProperty([None])
     y_axis = ListProperty([None])
 
     def get_x_axis(self, axis=0):
+        """Get X-axis parameters for specified axis index."""
         if axis == 0:
             return self.xlog, self.xmin, self.xmax
         info = self.x_axis[axis]
         return info["log"], info["min"], info["max"]
 
     def get_y_axis(self, axis=0):
+        """Get Y-axis parameters for specified axis index."""
         if axis == 0:
             return self.ylog, self.ymin, self.ymax
         info = self.y_axis[axis]
         return info["log"], info["min"], info["max"]
 
     def add_x_axis(self, xmin, xmax, xlog=False):
-        data = {
-            "log": xlog,
-            "min": xmin,
-            "max": xmax
-        }
+        """Add additional X-axis with specified parameters."""
+        data = {"log": xlog, "min": xmin, "max": xmax}
         self.x_axis.append(data)
         return data
 
     def add_y_axis(self, ymin, ymax, ylog=False):
-        data = {
-            "log": ylog,
-            "min": ymin,
-            "max": ymax
-        }
+        """Add additional Y-axis with specified parameters."""
+        data = {"log": ylog, "min": ymin, "max": ymax}
         self.y_axis.append(data)
         return data
 
     def _update_plots(self, size):
+        """Update all plots with current size and axis parameters."""
         for plot in self.plots:
             xlog, xmin, xmax = self.get_x_axis(plot.x_axis)
             ylog, ymin, ymax = self.get_y_axis(plot.y_axis)
             plot._update(xlog, xmin, xmax, ylog, ymin, ymax, size)
 
     def _update_colors(self, *args):
+        """Update color properties of graph elements."""
         self._mesh_ticks_color.rgba = tuple(self.tick_color)
         self._background_color.rgba = tuple(self.background_color)
         self._mesh_rect_color.rgba = tuple(self.border_color)
 
     def _redraw_all(self, *args):
-        # add/remove all the required labels
+        """Perform complete redraw of graph including labels and ticks."""
+        # Update axis labels and ticks
         xpoints_major, xpoints_minor = self._redraw_x(*args)
         ypoints_major, ypoints_minor = self._redraw_y(*args)
 
+        # Update legend labels if present
         if self._legend:
             options = self.label_options.copy()
             options.update(**self.legend_label_options)
-            for c in self._legend.children:
-                for k, v in options.items():
-                    setattr(c, k, v)
+            for child in self._legend.children:
+                for key, value in options.items():
+                    setattr(child, key, value)
 
+        # Update mesh for ticks
         mesh = self._mesh_ticks
         n_points = (len(xpoints_major) + len(xpoints_minor) +
-                    len(ypoints_major) + len(ypoints_minor))
+                   len(ypoints_major) + len(ypoints_minor))
         mesh.vertices = [0] * (n_points * 8)
-        mesh.indices = [k for k in range(n_points * 2)]
+        mesh.indices = list(range(n_points * 2))
+
         self._redraw_size()
 
     def _redraw_x(self, *args):
+        """Redraw X-axis labels and calculate tick positions."""
+        # Handle X-axis label
         if self.xlabel:
             xlabel = self._xlabel
             if not xlabel:
                 xlabel = Label()
                 self.add_widget(xlabel)
                 self._xlabel = xlabel
-
-            for k, v in self.label_options.items():
-                setattr(xlabel, k, v)
-
+            # Apply label options
+            for key, value in self.label_options.items():
+                setattr(xlabel, key, value)
         else:
             xlabel = self._xlabel
             if xlabel:
                 self.remove_widget(xlabel)
                 self._xlabel = None
+
+        # Calculate tick positions
         grids = self._x_grid_label
-        xpoints_major, xpoints_minor = self._get_ticks(self.x_ticks_major,
-                                                       self.x_ticks_minor,
-                                                       self.xlog, self.xmin,
-                                                       self.xmax)
+        xpoints_major, xpoints_minor = self._get_ticks(
+            self.x_ticks_major, self.x_ticks_minor, self.xlog, self.xmin, self.xmax)
         self._ticks_majorx = xpoints_major
         self._ticks_minorx = xpoints_minor
 
+        # Determine number of labels needed
         if not self.x_grid_label:
             n_labels = 0
         elif isinstance(self.x_grid_label, (tuple, list, str)):
@@ -805,44 +858,49 @@ class Graph(Widget):
         else:
             n_labels = len(xpoints_major)
 
+        # Remove excess labels
         for k in range(n_labels, len(grids)):
             self.remove_widget(grids[k])
         del grids[n_labels:]
 
+        # Add new labels as needed
         grid_len = len(grids)
         grids.extend([None] * (n_labels - len(grids)))
         options = self.label_options.copy()
         options.update(**self.tick_label_options)
+
         for k in range(grid_len, n_labels):
-            grids[k] = GraphRotatedLabel(
-                angle=self.x_ticks_angle,
-                **options)
+            grids[k] = GraphRotatedLabel(angle=self.x_ticks_angle, **options)
             self.add_widget(grids[k])
+
         return xpoints_major, xpoints_minor
 
     def _redraw_y(self, *args):
+        """Redraw Y-axis labels and calculate tick positions."""
+        # Handle Y-axis label
         if self.ylabel:
             ylabel = self._ylabel
             if not ylabel:
                 ylabel = GraphRotatedLabel()
                 self.add_widget(ylabel)
                 self._ylabel = ylabel
-
-            for k, v in self.label_options.items():
-                setattr(ylabel, k, v)
+            # Apply label options
+            for key, value in self.label_options.items():
+                setattr(ylabel, key, value)
         else:
             ylabel = self._ylabel
             if ylabel:
                 self.remove_widget(ylabel)
                 self._ylabel = None
+
+        # Calculate tick positions
         grids = self._y_grid_label
-        ypoints_major, ypoints_minor = self._get_ticks(self.y_ticks_major,
-                                                       self.y_ticks_minor,
-                                                       self.ylog, self.ymin,
-                                                       self.ymax)
+        ypoints_major, ypoints_minor = self._get_ticks(
+            self.y_ticks_major, self.y_ticks_minor, self.ylog, self.ymin, self.ymax)
         self._ticks_majory = ypoints_major
         self._ticks_minory = ypoints_minor
 
+        # Determine number of labels needed
         if not self.y_grid_label:
             n_labels = 0
         elif isinstance(self.y_grid_label, (tuple, list, str)):
@@ -850,177 +908,206 @@ class Graph(Widget):
         else:
             n_labels = len(ypoints_major)
 
+        # Remove excess labels
         for k in range(n_labels, len(grids)):
             self.remove_widget(grids[k])
         del grids[n_labels:]
 
+        # Add new labels as needed
         grid_len = len(grids)
         grids.extend([None] * (n_labels - len(grids)))
         options = self.label_options.copy()
         options.update(**self.tick_label_options)
+
         for k in range(grid_len, n_labels):
             grids[k] = Label(**options)
             self.add_widget(grids[k])
+
         return ypoints_major, ypoints_minor
 
     def _redraw_size(self, *args):
-        # size a 4-tuple describing the bounding box in which we can draw
-        # graphs, it's (x0, y0, x1, y1), which correspond with the bottom left
-        # and top right corner locations, respectively
+        """Update graph layout and plot positions based on current size."""
         self._clear_buffer()
         size = self._update_labels()
-        self.view_pos = self._plot_area.pos = (size[0], size[1])
-        self.view_size = self._plot_area.size = (
-            size[2] - size[0], size[3] - size[1])
 
+        # Update plot area position and size
+        self.view_pos = self._plot_area.pos = (size[0], size[1])
+        self.view_size = self._plot_area.size = (size[2] - size[0], size[3] - size[1])
+
+        # Update FBO size
         if self.size[0] and self.size[1]:
             self._fbo.size = self.size
         else:
-            self._fbo.size = 1, 1  # gl errors otherwise
+            self._fbo.size = 1, 1  # Prevent GL errors
+
+        # Update FBO rectangle
         self._fbo_rect.texture = self._fbo.texture
         self._fbo_rect.size = self.size
         self._fbo_rect.pos = self.pos
         self._background_rect.size = self.size
+
+        # Update ticks and plots
         self._update_ticks(size)
         self._update_plots(size)
 
     def _update_legend(self, *_):
-        if self.legend:
-            self.legend.size = self.legend.minimum_size
-            pos, size = self.view_pos, self.view_size
-            ph = self.legend.pos_hint
-            if 'x' in ph or 'center_x' in ph or 'right' in ph:
-                x = size[0] * (ph.get('x', ph.get('center_x', ph.get('right')))) \
-                    - (self.legend.width * (0 if 'x' in ph else .5 if 'center_x' in ph else 1)) \
-                    - (self.padding * (-1 if 'x' in ph else 0 if 'center_x' in ph else 1))
-                self.legend.x = self.x + pos[0] + x
-            if 'y' in ph or 'center_y' in ph or 'top' in ph:
-                y = size[1] * (ph.get('y', ph.get('center_y', ph.get('top')))) \
-                    - (self.legend.height * (0 if 'y' in ph else .5 if 'center_y' in ph else 1)) \
-                    - (self.padding * (-1 if 'y' in ph else 0 if 'center_y' in ph else 1))
-                self.legend.y = self.y + pos[1] + y
-            for i, plot in enumerate(self._legend_plots):
-                label = self.legend.children[-(i+1)]
-                drawing_center = label.x - self.legend.spacing - self.legend.marker_width / 2, label.center_y
-                plot.draw_legend(drawing_center, self.legend.marker_size)
+        """Update legend position and marker drawings."""
+        if not self.legend:
+            return
+
+        self.legend.size = self.legend.minimum_size
+        pos, size = self.view_pos, self.view_size
+        ph = self.legend.pos_hint
+
+        # Calculate X position
+        if 'x' in ph or 'center_x' in ph or 'right' in ph:
+            x = size[0] * (ph.get('x', ph.get('center_x', ph.get('right')))) \
+                - (self.legend.width * (0 if 'x' in ph else .5 if 'center_x' in ph else 1)) \
+                - (self.padding * (-1 if 'x' in ph else 0 if 'center_x' in ph else 1))
+            self.legend.x = self.x + pos[0] + x
+
+        # Calculate Y position
+        if 'y' in ph or 'center_y' in ph or 'top' in ph:
+            y = size[1] * (ph.get('y', ph.get('center_y', ph.get('top')))) \
+                - (self.legend.height * (0 if 'y' in ph else .5 if 'center_y' in ph else 1)) \
+                - (self.padding * (-1 if 'y' in ph else 0 if 'center_y' in ph else 1))
+            self.legend.y = self.y + pos[1] + y
+
+        # Update legend markers
+        for i, plot in enumerate(self._legend_plots):
+            label = self.legend.children[-(i+1)]
+            drawing_center = (label.x - self.legend.spacing - self.legend.marker_width / 2,
+                            label.center_y)
+            plot.draw_legend(drawing_center, self.legend.marker_size)
 
     def _clear_buffer(self, *largs):
+        """Clear the FBO buffer."""
         fbo = self._fbo
         fbo.bind()
         fbo.clear_buffer()
         fbo.release()
 
     def add_plot(self, plot):
-        '''Add a new plot to this graph.
+        """Add a new plot to this graph.
 
         :Parameters:
-            `plot`:
-                Plot to add to this graph.
+            `plot`: Plot to add to this graph.
 
         >>> graph = Graph()
         >>> plot = MeshLinePlot(mode='line_strip', color=[1, 0, 0, 1])
         >>> plot.points = [(x / 10., sin(x / 50.)) for x in range(-0, 101)]
         >>> graph.add_plot(plot)
-        '''
+        """
         if plot in self.plots:
             return
+
+        # Add plot drawing instructions to canvas
         add = self._plot_area.canvas.add
         for instr in plot.get_drawings():
             add(instr)
+
         plot.bind(on_clear_plot=self._clear_buffer)
         self.plots.append(plot)
 
     def remove_plot(self, plot):
-        '''Remove a plot from this graph.
+        """Remove a plot from this graph.
 
         :Parameters:
-            `plot`:
-                Plot to remove from this graph.
+            `plot`: Plot to remove from this graph.
 
         >>> graph = Graph()
         >>> plot = MeshLinePlot(mode='line_strip', color=[1, 0, 0, 1])
         >>> plot.points = [(x / 10., sin(x / 50.)) for x in range(-0, 101)]
         >>> graph.add_plot(plot)
         >>> graph.remove_plot(plot)
-        '''
+        """
         if plot not in self.plots:
             return
+
+        # Remove plot drawing instructions from canvas
         remove = self._plot_area.canvas.remove
         for instr in plot.get_drawings():
             remove(instr)
+
         plot.unbind(on_clear_plot=self._clear_buffer)
         self.plots.remove(plot)
         self._clear_buffer()
 
     def collide_plot(self, x, y):
-        '''Determine if the given coordinates fall inside the plot area. Use
-        `x, y = self.to_widget(x, y, relative=True)` to first convert into
+        """Determine if the given coordinates fall inside the plot area.
+
+        Use `x, y = self.to_widget(x, y, relative=True)` to first convert into
         widget coordinates if it's in window coordinates because it's assumed
         to be given in local widget coordinates, relative to the graph's pos.
 
         :Parameters:
-            `x, y`:
-                The coordinates to test.
-        '''
-        adj_x, adj_y = x - self._plot_area.pos[0], y - self._plot_area.pos[1]
-        return 0 <= adj_x <= self._plot_area.size[0] \
-            and 0 <= adj_y <= self._plot_area.size[1]
+            `x, y`: The coordinates to test.
+        """
+        adj_x = x - self._plot_area.pos[0]
+        adj_y = y - self._plot_area.pos[1]
+        return (0 <= adj_x <= self._plot_area.size[0] and
+                0 <= adj_y <= self._plot_area.size[1])
 
     def to_data(self, x, y):
-        '''Convert widget coords to data coords. Use
-        `x, y = self.to_widget(x, y, relative=True)` to first convert into
+        """Convert widget coords to data coords.
+
+        Use `x, y = self.to_widget(x, y, relative=True)` to first convert into
         widget coordinates if it's in window coordinates because it's assumed
         to be given in local widget coordinates, relative to the graph's pos.
 
         :Parameters:
-            `x, y`:
-                The coordinates to convert.
+            `x, y`: The coordinates to convert.
 
         If the graph has multiple axes, use :class:`Plot.unproject` instead.
-        '''
+        """
         adj_x = float(x - self._plot_area.pos[0])
         adj_y = float(y - self._plot_area.pos[1])
         norm_x = adj_x / self._plot_area.size[0]
         norm_y = adj_y / self._plot_area.size[1]
+
+        # Convert normalized coordinates to data coordinates
         if self.xlog:
             xmin, xmax = log10(self.xmin), log10(self.xmax)
             conv_x = 10.**(norm_x * (xmax - xmin) + xmin)
         else:
             conv_x = norm_x * (self.xmax - self.xmin) + self.xmin
+
         if self.ylog:
             ymin, ymax = log10(self.ymin), log10(self.ymax)
             conv_y = 10.**(norm_y * (ymax - ymin) + ymin)
         else:
             conv_y = norm_y * (self.ymax - self.ymin) + self.ymin
+
         return [conv_x, conv_y]
 
+    # Axis range properties
     xmin = NumericProperty(0.)
-    '''The x-axis minimum value.
+    """The x-axis minimum value.
 
     If :data:`xlog` is True, xmin must be larger than zero.
     If :data:`xmax` < :data:`xmin`, the x axis will be displayed reversed.
 
     :data:`xmin` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
-    '''
+    """
 
     xmax = NumericProperty(100.)
-    '''The x-axis maximum value.
-    
+    """The x-axis maximum value.
+
     If :data:`xmax` < :data:`xmin`, the x axis will be displayed reversed.
 
     :data:`xmax` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
-    '''
+    """
 
     xlog = BooleanProperty(False)
-    '''Determines whether the x-axis should be displayed logarithmically (True)
+    """Determines whether the x-axis should be displayed logarithmically (True)
     or linearly (False).
 
     :data:`xlog` is a :class:`~kivy.properties.BooleanProperty`, defaults
     to False.
-    '''
+    """
 
     x_ticks_major = ObjectProperty(0)
-    '''Positioning of major tick marks on the x-axis.
+    """Positioning of major tick marks on the x-axis.
 
     May either be a numerical value indicating the distance between ticks
     or a list or tuple giving the absolute tick positions.
@@ -1042,22 +1129,22 @@ class Graph(Widget):
     1.5, there will be ticks at 0.1, 5, 100, 5,000... Also notice, that there's
     always a major tick at the start. Finally, if e.g. :data:`xmin` is 0.6
     and this 0.5 there will be ticks at 0.6, 1, 5...
-    
+
     If :data:`x_ticks_major` is a list or tuple, a major tick will be displayed
     at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_major` is a
     :class:`~kivy.properties.ObjectProperty`, defaults to 0.
-    '''
+    """
 
     x_ticks_minor = ObjectProperty(0)
-    '''Positioning of minor tick marks on the x-axis.
+    """Positioning of minor tick marks on the x-axis.
 
     May either be a numerical value indicating the number of subintervals
     between major ticks or a list or tuple giving the absolute tick positions.
     If either one of :data:`x_ticks_minor` and :data:`x_ticks_major` is a
     numerical value and the other one is not, :data:`x_ticks_minor` is ignored.
-    
+
     If :data:`x_ticks_major` is a numerical value greater than zero, it
     determines the number of sub-intervals into which ticks_major is divided.
     The actual number of minor ticks between the major ticks is
@@ -1072,16 +1159,16 @@ class Graph(Widget):
     ticks_major is 0.3, ticks will occur at 0.1, 0.12, 0.15, 0.18... Finally,
     as is common, if ticks major is 1, and ticks minor is 5, there will be
     ticks at 0.1, 0.2, 0.4... 0.8, 1, 2...
-    
+
     If :data:`x_ticks_minor` is a list or tuple, a minor tick will be displayed
     at each of the given values, if it is in the range of :data:`xmin` to :data:`xmax`.
 
     :data:`x_ticks_minor` is a
     :class:`~kivy.properties.ObjectProperty`, defaults to 0.
-    '''
+    """
 
     x_grid = BooleanProperty(False)
-    '''Determines whether the x-axis has tick marks or a full grid.
+    """Determines whether the x-axis has tick marks or a full grid.
 
     If :data:`x_ticks_major` is non-zero, then if x_grid is False tick marks
     will be displayed at every major tick. If x_grid is True, instead of ticks,
@@ -1089,12 +1176,12 @@ class Graph(Widget):
 
     :data:`x_grid` is a :class:`~kivy.properties.BooleanProperty`, defaults
     to False.
-    '''
+    """
 
     x_grid_label: Union[bool, Callable[[float], str], List[str], Tuple[str, ...], str] \
         = ObjectProperty(False)
-    '''Whether and how labels should be displayed beneath each major tick.
-    
+    """Whether and how labels should be displayed beneath each major tick.
+
     If false, no tick labels are shown.
     If true, each major tick will have a label containing the axis value displayed at precision :data:`precision`.
     It can also be a callable returning the string representation for a given float value.
@@ -1103,69 +1190,69 @@ class Graph(Widget):
 
     :data:`x_grid_label` is a :class:`~kivy.properties.ObjectProperty`,
     defaults to False.
-    '''
+    """
 
     xlabel = StringProperty('')
-    '''The label for the x-axis. If not empty it is displayed in the center of
+    """The label for the x-axis. If not empty it is displayed in the center of
     the axis.
 
     :data:`xlabel` is a :class:`~kivy.properties.StringProperty`,
     defaults to ''.
-    '''
+    """
 
     ymin = NumericProperty(0.)
-    '''The y-axis minimum value.
+    """The y-axis minimum value.
 
     If :data:`ylog` is True, ymin must be larger than zero.
     If :data:`ymax` < :data:`ymin`, the y axis will be displayed reversed.
 
     :data:`ymin` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
-    '''
+    """
 
     ymax = NumericProperty(100.)
-    '''The y-axis maximum value.
-    
+    """The y-axis maximum value.
+
     If :data:`ymax` < :data:`ymin`, the y axis will be displayed reversed.
 
     :data:`ymax` is a :class:`~kivy.properties.NumericProperty`, defaults to 0.
-    '''
+    """
 
     ylog = BooleanProperty(False)
-    '''Determines whether the y-axis should be displayed logarithmically (True)
+    """Determines whether the y-axis should be displayed logarithmically (True)
     or linearly (False).
 
     :data:`ylog` is a :class:`~kivy.properties.BooleanProperty`, defaults
     to False.
-    '''
+    """
 
     y_ticks_major = ObjectProperty(0)
-    '''Positioning of major tick marks on the y-axis.
+    """Positioning of major tick marks on the y-axis.
     See :data:`x_ticks_major`.
 
     :data:`y_ticks_major` is a
     :class:`~kivy.properties.ObjectProperty`, defaults to 0.
-    '''
+    """
 
     y_ticks_minor = ObjectProperty(0)
-    '''Positioning of minor tick marks on the y-axis.
+    """Positioning of minor tick marks on the y-axis.
     See :data:`x_ticks_minor`.
 
     :data:`y_ticks_minor` is a
     :class:`~kivy.properties.ObjectProperty`, defaults to 0.
-    '''
+    """
 
     y_grid = BooleanProperty(False)
-    '''Determines whether the y-axis has tick marks or a full grid. See
+    """Determines whether the y-axis has tick marks or a full grid. See
     :data:`x_grid`.
 
     :data:`y_grid` is a :class:`~kivy.properties.BooleanProperty`, defaults
     to False.
-    '''
+    """
 
     y_grid_label: Union[bool, Callable[[float], str], List[str], Tuple[str, ...], str] \
         = ObjectProperty(False)
-    '''Whether and how labels should be displayed beneath each major tick.
-    
+    """Whether and how labels should be displayed beneath each major tick.
+
     If false, no tick labels are shown.
     If true, each major tick will have a label containing the axis value displayed at precision :data:`precision`.
     It can also be a callable returning the string representation for a given float value.
@@ -1174,71 +1261,71 @@ class Graph(Widget):
 
     :data:`y_grid_label` is a :class:`~kivy.properties.ObjectProperty`,
     defaults to False.
-    '''
+    """
 
     ylabel = StringProperty('')
-    '''The label for the y-axis. If not empty it is displayed in the center of
+    """The label for the y-axis. If not empty it is displayed in the center of
     the axis.
 
     :data:`ylabel` is a :class:`~kivy.properties.StringProperty`,
     defaults to ''.
-    '''
+    """
 
     padding = NumericProperty('5dp')
-    '''Padding distances between the labels, axes titles and graph, as
+    """Padding distances between the labels, axes titles and graph, as
     well between the widget and the objects near the boundaries.
 
     :data:`padding` is a :class:`~kivy.properties.NumericProperty`, defaults
     to 5dp.
-    '''
+    """
 
     x_ticks_angle = NumericProperty(0)
-    '''Rotate angle of the x-axis tick marks.
+    """Rotate angle of the x-axis tick marks.
 
     :data:`x_ticks_angle` is a :class:`~kivy.properties.NumericProperty`,
     defaults to 0.
-    '''
+    """
 
     precision = StringProperty('%g')
-    '''Determines the numerical precision of the tick mark labels. This value
+    """Determines the numerical precision of the tick mark labels. This value
     governs how the numbers are converted into string representation. Accepted
     values are those listed in Python's manual in the
     "String Formatting Operations" section.
 
     :data:`precision` is a :class:`~kivy.properties.StringProperty`, defaults
     to '%g'.
-    '''
+    """
 
     draw_border = BooleanProperty(True)
-    '''Whether a border is drawn around the canvas of the graph where the
+    """Whether a border is drawn around the canvas of the graph where the
     plots are displayed.
 
     :data:`draw_border` is a :class:`~kivy.properties.BooleanProperty`,
     defaults to True.
-    '''
+    """
 
     plots = ListProperty([])
-    '''Holds a list of all the plots in the graph. To add and remove plots
+    """Holds a list of all the plots in the graph. To add and remove plots
     from the graph use :data:`add_plot` and :data:`add_plot`. Do not add
     directly edit this list.
 
     :data:`plots` is a :class:`~kivy.properties.ListProperty`,
     defaults to [].
-    '''
+    """
 
     view_size = ObjectProperty((0, 0))
-    '''The size of the graph viewing area - the area where the plots are
+    """The size of the graph viewing area - the area where the plots are
     displayed, excluding labels etc.
-    '''
+    """
 
     view_pos = ObjectProperty((0, 0))
-    '''The pos of the graph viewing area - the area where the plots are
+    """The pos of the graph viewing area - the area where the plots are
     displayed, excluding labels etc. It is relative to the graph's pos.
-    '''
+    """
 
 
 class Plot(EventDispatcher):
-    '''Plot class, see module documentation for more information.
+    """Plot class, see module documentation for more information.
 
     :Events:
         `on_clear_plot`
@@ -1246,36 +1333,32 @@ class Plot(EventDispatcher):
             it should clear the old drawings.
 
     ..versionadded:: 0.4
-    '''
+    """
 
     __events__ = ('on_clear_plot', )
 
-    # most recent values of the params used to draw the plot
+    # Most recent values of the params used to draw the plot
     params = DictProperty({'xlog': False, 'xmin': 0, 'xmax': 100,
-                           'ylog': False, 'ymin': 0, 'ymax': 100,
-                           'size': (0, 0, 0, 0)})
+                          'ylog': False, 'ymin': 0, 'ymax': 100,
+                          'size': (0, 0, 0, 0)})
 
     color = ColorProperty([1, 1, 1, 1])
-    '''Color of the plot.
-    '''
+    """Color of the plot."""
 
     points = ListProperty([])
-    '''List of (x, y) points to be displayed in the plot.
+    """List of (x, y) points to be displayed in the plot.
 
     The elements of points are 2-tuples, (x, y). The points are displayed
     based on the mode setting.
 
-    :data:`points` is a :class:`~kivy.properties.ListProperty`, defaults to
-    [].
-    '''
+    :data:`points` is a :class:`~kivy.properties.ListProperty`, defaults to [].
+    """
 
     x_axis = NumericProperty(0)
-    '''Index of the X axis to use, defaults to 0
-    '''
+    """Index of the X axis to use, defaults to 0."""
 
     y_axis = NumericProperty(0)
-    '''Index of the Y axis to use, defaults to 0
-    '''
+    """Index of the Y axis to use, defaults to 0."""
 
     def __init__(self, **kwargs):
         super(Plot, self).__init__(**kwargs)
@@ -1284,17 +1367,15 @@ class Plot(EventDispatcher):
         self._drawings = self.create_drawings()
 
     def funcx(self):
-        """Return a function that convert or not the X value according to plot
-        prameters"""
+        """Return a function that converts or not the X value according to plot parameters."""
         return log10 if self.params["xlog"] else lambda x: x
 
     def funcy(self):
-        """Return a function that convert or not the Y value according to plot
-        prameters"""
+        """Return a function that converts or not the Y value according to plot parameters."""
         return log10 if self.params["ylog"] else lambda y: y
 
     def x_px(self):
-        """Return a function that convert the X value of the graph to the
+        """Return a function that converts the X value of the graph to the
         pixel coordinate on the plot, according to the plot settings and axis
         settings. It's relative to the graph pos.
         """
@@ -1304,14 +1385,12 @@ class Plot(EventDispatcher):
         xmin = funcx(params["xmin"])
         xmax = funcx(params["xmax"])
         xrange = float(xmax - xmin)
-        ratiox = 0
-        if xrange:
-            ratiox = (size[2] - size[0]) / xrange
+        ratiox = (size[2] - size[0]) / xrange if xrange else 0
 
         return lambda x: (funcx(x) - xmin) * ratiox + size[0]
 
     def y_px(self):
-        """Return a function that convert the Y value of the graph to the
+        """Return a function that converts the Y value of the graph to the
         pixel coordinate on the plot, according to the plot settings and axis
         settings. The returned value is relative to the graph pos.
         """
@@ -1321,14 +1400,12 @@ class Plot(EventDispatcher):
         ymin = funcy(params["ymin"])
         ymax = funcy(params["ymax"])
         yrange = float(ymax - ymin)
-        ratioy = 0
-        if yrange:
-            ratioy = (size[3] - size[1]) / yrange
+        ratioy = (size[3] - size[1]) / yrange if yrange else 0
 
         return lambda y: (funcy(y) - ymin) * ratioy + size[1]
 
     def unproject(self, x, y):
-        """Return a function that unproject a pixel to a X/Y value on the plot
+        """Return a function that unprojects a pixel to a X/Y value on the plot
         (works only for linear, not log yet). `x`, `y`, is relative to the
         graph pos, so the graph's pos needs to be subtracted from x, y before
         passing it in.
@@ -1336,27 +1413,21 @@ class Plot(EventDispatcher):
         params = self.params
         size = params["size"]
 
-        xmin = params["xmin"]
-        xmax = params["xmax"]
+        xmin, xmax = params["xmin"], params["xmax"]
         xrange = float(xmax - xmin)
-        ratiox = 0
-        if xrange:
-            ratiox = (size[2] - size[0]) / xrange
+        ratiox = (size[2] - size[0]) / xrange if xrange else 0
 
-        ymin = params["ymin"]
-        ymax = params["ymax"]
+        ymin, ymax = params["ymin"], params["ymax"]
         yrange = float(ymax - ymin)
-        ratioy = 0
-        if yrange:
-            ratioy = (size[3] - size[1]) / yrange
+        ratioy = (size[3] - size[1]) / yrange if yrange else 0
 
-        x0 = (x - size[0]) / ratiox + xmin
-        y0 = (y - size[1]) / ratioy + ymin
+        x0 = (x - size[0]) / ratiox + xmin if ratiox else xmin
+        y0 = (y - size[1]) / ratioy + ymin if ratioy else ymin
         return x0, y0
 
     def get_px_bounds(self):
         """Returns a dict containing the pixels bounds from the plot parameters.
-         The returned values are relative to the graph pos.
+        The returned values are relative to the graph pos.
         """
         params = self.params
         x_px = self.x_px()
@@ -1369,76 +1440,71 @@ class Plot(EventDispatcher):
         }
 
     def update(self, xlog, xmin, xmax, ylog, ymin, ymax, size):
-        '''Called by graph whenever any of the parameters
-        change. The plot should be recalculated then.
+        """Called by graph whenever any of the parameters change. The plot should be recalculated then.
         log, min, max indicate the axis settings.
         size a 4-tuple describing the bounding box in which we can draw
         graphs, it's (x0, y0, x1, y1), which correspond with the bottom left
         and top right corner locations, respectively.
-        '''
+        """
         self.params.update({
             'xlog': xlog, 'xmin': xmin, 'xmax': xmax, 'ylog': ylog,
             'ymin': ymin, 'ymax': ymax, 'size': size})
 
     def get_group(self):
-        '''returns a string which is unique and is the group name given to all
+        """Returns a string which is unique and is the group name given to all
         the instructions returned by _get_drawings. Graph uses this to remove
         these instructions when needed.
-        '''
+        """
         return ''
 
     def get_drawings(self):
-        '''returns a list of canvas instructions that will be added to the
+        """Returns a list of canvas instructions that will be added to the
         graph's canvas.
-        '''
+        """
         if isinstance(self._drawings, (tuple, list)):
             return self._drawings
         return []
 
     def create_drawings(self):
-        '''called once to create all the canvas instructions needed for the
-        plot
-        '''
+        """Called once to create all the canvas instructions needed for the plot."""
         pass
 
     def create_legend_drawings(self):
-        '''called when a legend is added containing this plot. return drawing instructions.
-        '''
+        """Called when a legend is added containing this plot. Return drawing instructions."""
         return []
 
     def draw(self, *largs):
-        '''draw the plot according to the params. It dispatches on_clear_plot
+        """Draw the plot according to the params. It dispatches on_clear_plot
         so derived classes should call super before updating.
-        '''
+        """
         self.dispatch('on_clear_plot')
 
     def draw_legend(self, center, maximum_size):
-        '''draw the legend representation.
-        '''
+        """Draw the legend representation."""
         pass
 
     def iterate_points(self):
-        '''Iterate on all the points adjusted to the graph settings
-        '''
+        """Iterate on all the points adjusted to the graph settings."""
         x_px = self.x_px()
         y_px = self.y_px()
         for x, y in self.points:
             yield x_px(x), y_px(y)
 
     def on_clear_plot(self, *largs):
+        """Event handler for plot clearing."""
         pass
 
-    # compatibility layer
+    # Compatibility layer
     _update = update
     _get_drawings = get_drawings
     _params = params
 
 
 class MeshLinePlot(Plot):
-    '''MeshLinePlot class which displays a set of points similar to a mesh.
-    '''
+    """MeshLinePlot class which displays a set of points similar to a mesh."""
 
     def _set_mode(self, value):
+        """Set the drawing mode for the mesh."""
         if hasattr(self, '_mesh'):
             self._mesh.mode = value
         if hasattr(self, '_mesh_legend'):
@@ -1446,74 +1512,92 @@ class MeshLinePlot(Plot):
             self.draw_legend()
 
     mode = AliasProperty(lambda self: self._mesh.mode, _set_mode)
-    '''VBO Mode used for drawing the points. Can be one of: 'points',
+    """VBO Mode used for drawing the points. Can be one of: 'points',
     'line_strip', 'line_loop', 'lines', 'triangle_strip', 'triangle_fan'.
     See :class:`~kivy.graphics.Mesh` for more details.
 
     Defaults to 'line_strip'.
-    '''
+    """
 
     def create_drawings(self):
+        """Create the drawing instructions for the mesh line plot."""
         self._color = Color(*self.color)
         self._mesh = Mesh(mode='line_strip')
-        self.bind(
-            color=lambda instr, value: setattr(self._color, "rgba", value))
+        self.bind(color=lambda instr, value: setattr(self._color, "rgba", value))
         return [self._color, self._mesh]
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         self._mesh_legend = Mesh(mode=self.mode)
         return [self._color, self._mesh_legend]
 
     def draw_legend(self, center=None, maximum_size=None):
-        self._legend_center = center = center or self._legend_center
-        self._legend_maximum_size = maximum_size = maximum_size or self._legend_maximum_size
+        """Draw the legend marker for this plot."""
+        self._legend_center = center = center or getattr(self, '_legend_center', (0, 0))
+        self._legend_maximum_size = maximum_size = maximum_size or getattr(self, '_legend_maximum_size', (20, 12))
+
         x, right = center[0] - .5 * maximum_size[0], center[0] + .5 * maximum_size[0]
         y, top = center[1] - .5 * maximum_size[1], center[1] + .5 * maximum_size[1]
-        self._mesh_legend.vertices = \
-            [x, center[1], 0, 0, right, center[1], 0, 0] if self.mode == 'line_strip' else \
-            [x, y, 0, 0, x, top, 0, 0, right, top, 0, 0, right, y, 0, 0,
-             center[0], center[1], 0, 0] if self.mode == "points" else \
-            [x, y, 0, 0, center[0], top, 0, 0, center[0], y, 0, 0, right, top, 0, 0] if self.mode == "lines" else \
-            [x, y, 0, 0, center[0], top, 0, 0, right, y, 0, 0]
-        self._mesh_legend.indices = tuple(range(len(self._mesh_legend.vertices) // 4))
+
+        # Set vertices based on mode
+        if self.mode == 'line_strip':
+            vertices = [x, center[1], 0, 0, right, center[1], 0, 0]
+        elif self.mode == "points":
+            vertices = [x, y, 0, 0, x, top, 0, 0, right, top, 0, 0, right, y, 0, 0,
+                       center[0], center[1], 0, 0]
+        elif self.mode == "lines":
+            vertices = [x, y, 0, 0, center[0], top, 0, 0, center[0], y, 0, 0, right, top, 0, 0]
+        else:
+            vertices = [x, y, 0, 0, center[0], top, 0, 0, right, y, 0, 0]
+
+        self._mesh_legend.vertices = vertices
+        self._mesh_legend.indices = tuple(range(len(vertices) // 4))
 
     def draw(self, *args):
+        """Draw the mesh line plot."""
         super(MeshLinePlot, self).draw(*args)
         self.plot_mesh()
 
     def plot_mesh(self):
-        points = [p for p in self.iterate_points()]
+        """Update the mesh with current point data."""
+        points = list(self.iterate_points())
         mesh, vert, _ = self.set_mesh_size(len(points))
+
         for k, (x, y) in enumerate(points):
             vert[k * 4] = x
             vert[k * 4 + 1] = y
         mesh.vertices = vert
 
     def set_mesh_size(self, size):
+        """Resize the mesh to accommodate the specified number of points."""
         mesh = self._mesh
         vert = mesh.vertices
         ind = mesh.indices
         diff = size - len(vert) // 4
+
         if diff < 0:
             del vert[4 * size:]
             del ind[size:]
         elif diff > 0:
             ind.extend(range(len(ind), len(ind) + diff))
             vert.extend([0] * (diff * 4))
+
         mesh.vertices = vert
         return mesh, vert, ind
 
 
 class MeshStemPlot(MeshLinePlot):
-    '''MeshStemPlot uses the MeshLinePlot class to draw a stem plot. The data
+    """MeshStemPlot uses the MeshLinePlot class to draw a stem plot. The data
     provided is graphed from origin to the data point.
-    '''
+    """
 
     def plot_mesh(self):
-        points = [p for p in self.iterate_points()]
+        """Update the mesh with stem plot data (lines from origin to points)."""
+        points = list(self.iterate_points())
         mesh, vert, _ = self.set_mesh_size(len(points) * 2)
         y0 = self.y_px()(0)
-        for k, (x, y) in enumerate(self.iterate_points()):
+
+        for k, (x, y) in enumerate(points):
             vert[k * 8] = x
             vert[k * 8 + 1] = y0
             vert[k * 8 + 4] = x
@@ -1522,12 +1606,13 @@ class MeshStemPlot(MeshLinePlot):
 
 
 class LinePlot(Plot):
-    """LinePlot draws using a standard Line object.
-    """
+    """LinePlot draws using a standard Line object."""
 
     line_width = NumericProperty(1)
+    """Width of the line."""
 
     def create_drawings(self):
+        """Create the drawing instructions for the line plot."""
         from kivy.graphics import Line, RenderContext
 
         self._grc = RenderContext(
@@ -1542,14 +1627,16 @@ class LinePlot(Plot):
         return [self._grc]
 
     def draw(self, *args):
+        """Draw the line plot."""
         super(LinePlot, self).draw(*args)
-        # flatten the list
+        # Flatten the point list
         points = []
         for x, y in self.iterate_points():
-            points += [x, y]
+            points.extend([x, y])
         self._gline.points = points
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         from kivy.graphics import Line, RenderContext
 
         self._grc_legend = RenderContext(
@@ -1562,12 +1649,14 @@ class LinePlot(Plot):
         return [self._grc_legend]
 
     def draw_legend(self, center, maximum_size):
+        """Draw the legend marker for this plot."""
         self._maximum_legend_line_width = maximum_size[1] / 2
         self._gline_legend.points = [center[0] - .5 * maximum_size[0], center[1],
-                                     center[0] + .5 * maximum_size[0], center[1]]
+                                    center[0] + .5 * maximum_size[0], center[1]]
         self._gline_legend.width = min(self.line_width, self._maximum_legend_line_width)
 
     def on_line_width(self, *largs):
+        """Handle line width changes."""
         if hasattr(self, "_gline"):
             self._gline.width = self.line_width
         if hasattr(self, "_gline_legend"):
@@ -1575,9 +1664,9 @@ class LinePlot(Plot):
 
 
 class SmoothLinePlot(Plot):
-    '''Smooth Plot class, see module documentation for more information.
-    This plot use a specific Fragment shader for a custom anti aliasing.
-    '''
+    """Smooth Plot class, see module documentation for more information.
+    This plot uses a specific Fragment shader for custom anti aliasing.
+    """
 
     SMOOTH_FS = '''
     $HEADER$
@@ -1590,8 +1679,7 @@ class SmoothLinePlot(Plot):
     }
     '''
 
-    # XXX This gradient data is a 64x1 RGB image, and
-    # values goes from 0 -> 255 -> 0.
+    # 64x1 RGB image gradient data, values go from 0 -> 255 -> 0
     GRADIENT_DATA = (
         b"\x00\x00\x00\x07\x07\x07\x0f\x0f\x0f\x17\x17\x17\x1f\x1f\x1f"
         b"'''///777???GGGOOOWWW___gggooowww\x7f\x7f\x7f\x87\x87\x87"
@@ -1605,9 +1693,10 @@ class SmoothLinePlot(Plot):
         b"\x08\x08\x08\x00\x00\x00")
 
     def create_drawings(self):
+        """Create the drawing instructions for the smooth line plot."""
         from kivy.graphics import Line, RenderContext
 
-        # very first time, create a texture for the shader
+        # Create texture for the shader on first use
         if not hasattr(SmoothLinePlot, '_texture'):
             tex = Texture.create(size=(1, 64), colorfmt='rgb')
             tex.add_reload_observer(SmoothLinePlot._smooth_reload_observer)
@@ -1628,27 +1717,387 @@ class SmoothLinePlot(Plot):
 
     @staticmethod
     def _smooth_reload_observer(texture):
+        """Reload texture data when needed."""
         texture.blit_buffer(SmoothLinePlot.GRADIENT_DATA, colorfmt="rgb")
 
     def draw(self, *args):
+        """Draw the smooth line plot."""
         super(SmoothLinePlot, self).draw(*args)
-        # flatten the list
+        # Flatten the point list
         points = []
         for x, y in self.iterate_points():
-            points += [x, y]
+            points.extend([x, y])
         self._gline.points = points
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         return LinePlot.create_legend_drawings(self)
 
     def draw_legend(self, center, maximum_size):
+        """Draw the legend marker for this plot."""
         self.line_width = self._gline.width
         return LinePlot.draw_legend(self, center, maximum_size)
 
+class OptimizedSmoothLinePlot(Plot):
+    """
+    Optimized SmoothLinePlot implementation for real-time plotting.
+
+    Features:
+    - Single line rendering (no segments = no overlaps)
+    - Configurable anti-aliasing
+    - Automatic buffer management
+    - Memory leak prevention
+    - Performance optimizations
+    - Clean lines without shadows/contours
+    """
+
+    # Original shader from SmoothLinePlot
+    SMOOTH_FS = '''
+    $HEADER$
+    void main(void) {
+        float edgewidth = 0.015625 * 64.;
+        float t = texture2D(texture0, tex_coord0).r;
+        float e = smoothstep(0., edgewidth, t);
+        gl_FragColor = frag_color * vec4(1, 1, 1, e);
+    }
+    '''
+
+    # Original gradient data from SmoothLinePlot
+    GRADIENT_DATA = (
+        b"\x00\x00\x00\x07\x07\x07\x0f\x0f\x0f\x17\x17\x17\x1f\x1f\x1f"
+        b"'''///777???GGGOOOWWW___gggooowww\x7f\x7f\x7f\x87\x87\x87"
+        b"\x8f\x8f\x8f\x97\x97\x97\x9f\x9f\x9f\xa7\xa7\xa7\xaf\xaf\xaf"
+        b"\xb7\xb7\xb7\xbf\xbf\xbf\xc7\xc7\xc7\xcf\xcf\xcf\xd7\xd7\xd7"
+        b"\xdf\xdf\xdf\xe7\xe7\xe7\xef\xef\xef\xf7\xf7\xf7\xff\xff\xff"
+        b"\xf6\xf6\xf6\xee\xee\xee\xe6\xe6\xe6\xde\xde\xde\xd5\xd5\xd5"
+        b"\xcd\xcd\xcd\xc5\xc5\xc5\xbd\xbd\xbd\xb4\xb4\xb4\xac\xac\xac"
+        b"\xa4\xa4\xa4\x9c\x9c\x9c\x94\x94\x94\x8b\x8b\x8b\x83\x83\x83"
+        b"{{{sssjjjbbbZZZRRRJJJAAA999111)))   \x18\x18\x18\x10\x10\x10"
+        b"\x08\x08\x08\x00\x00\x00")
+
+    # Class-wide texture management for memory efficiency
+    _texture_cache = None
+    _texture_refs = 0
+
+    # Performance Properties
+    max_points = NumericProperty(2000)
+    """Maximum number of points before old ones are removed."""
+
+    cleanup_interval = NumericProperty(30.0)
+    """Interval for automatic cleanup in seconds."""
+
+    auto_cleanup = BooleanProperty(True)
+    """Enable automatic cleanup of old graphics buffers."""
+
+    # Visual Properties
+    line_width = NumericProperty(2.0)
+    """Line width in pixels."""
+
+    enable_antialiasing = BooleanProperty(True)
+    """Enable/disable anti-aliasing for smooth line edges."""
+
+    def __init__(self, **kwargs):
+        # Internal variables
+        self._draw_count = 0
+        self._last_cleanup_time = 0
+        self._grc = None
+        self._gcolor = None
+        self._gline = None
+        self._texture = None
+        self._is_drawing = False
+        self._points_cache = []
+
+        super().__init__(**kwargs)
+
+        # Setup texture if AA is enabled
+        self._setup_texture()
+
+        # Start cleanup timer
+        if self.auto_cleanup:
+            Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
+
+    @classmethod
+    def _get_shared_texture(cls):
+        """Get or create shared texture for all instances (memory optimization)"""
+        if cls._texture_cache is None:
+            try:
+                tex = Texture.create(size=(1, 64), colorfmt='rgb')
+                tex.add_reload_observer(cls._texture_reload_observer)
+                cls._texture_reload_observer(tex)
+                cls._texture_cache = tex
+                Logger.debug("OptimizedSmoothLinePlot: Created shared texture")
+            except Exception as e:
+                Logger.warning(f"OptimizedSmoothLinePlot: Texture creation failed: {e}")
+                cls._texture_cache = None
+
+        if cls._texture_cache:
+            cls._texture_refs += 1
+
+        return cls._texture_cache
+
+    @classmethod
+    def _release_shared_texture(cls):
+        """Release reference to shared texture"""
+        cls._texture_refs = max(0, cls._texture_refs - 1)
+        if cls._texture_refs == 0 and cls._texture_cache:
+            # Could cleanup texture here if needed
+            Logger.debug("OptimizedSmoothLinePlot: All texture references released")
+
+    @staticmethod
+    def _texture_reload_observer(texture):
+        """Reload texture data when needed"""
+        texture.blit_buffer(OptimizedSmoothLinePlot.GRADIENT_DATA, colorfmt="rgb")
+
+    def _setup_texture(self):
+        """Setup texture for anti-aliasing"""
+        if self.enable_antialiasing:
+            self._texture = self._get_shared_texture()
+        else:
+            self._texture = None
+
+    def create_drawings(self):
+        """Create single line drawing instruction"""
+        try:
+            if self.enable_antialiasing and self._texture:
+                # Use shader for anti-aliasing
+                self._grc = RenderContext(
+                    fs=OptimizedSmoothLinePlot.SMOOTH_FS,
+                    use_parent_modelview=True,
+                    use_parent_projection=True
+                )
+                with self._grc:
+                    self._gcolor = Color(*self.color)
+                    self._gline = Line(
+                        points=[],
+                        cap='none',
+                        width=self.line_width,
+                        texture=self._texture
+                    )
+            else:
+                # Simple rendering without shader
+                self._grc = RenderContext(
+                    use_parent_modelview=True,
+                    use_parent_projection=True
+                )
+                with self._grc:
+                    self._gcolor = Color(*self.color)
+                    self._gline = Line(
+                        points=[],
+                        cap='none',
+                        width=self.line_width
+                    )
+
+            return [self._grc]
+
+        except Exception as e:
+            Logger.error(f"OptimizedSmoothLinePlot: Failed to create drawings: {e}")
+            return []
+
+    def draw(self, *args):
+        """Main drawing routine with recursion protection"""
+        if self._is_drawing:
+            return
+
+        self._is_drawing = True
+        try:
+            super().draw(*args)
+            self._draw_optimized()
+        finally:
+            self._is_drawing = False
+
+    def _draw_optimized(self):
+        """Optimized single-line drawing"""
+        if not self._gline:
+            return
+
+        self._draw_count += 1
+        current_time = Clock.get_time()
+
+        # Get and manage points
+        points = self._manage_points()
+        if len(points) < 2:
+            self._gline.points = []
+            return
+
+        # Convert to flat point list
+        flat_points = []
+        for x, y in points:
+            flat_points.extend([x, y])
+
+        # Update single line (prevents overlaps and shadows)
+        self._gline.points = flat_points
+
+        # Periodic cleanup
+        if self._should_cleanup(current_time):
+            self._cleanup_old_data()
+            self._last_cleanup_time = current_time
+
+    def _manage_points(self):
+        """Efficient point management with caching"""
+        # Get current points
+        current_points = list(self.iterate_points())
+
+        # Check if points changed (avoid unnecessary processing)
+        if current_points == self._points_cache:
+            return self._points_cache
+
+        # Limit point count for performance
+        if len(current_points) > self.max_points:
+            current_points = current_points[-int(self.max_points):]
+            Logger.debug(f"OptimizedSmoothLinePlot: Limited points to {len(current_points)}")
+
+        # Remove consecutive duplicate points
+        if len(current_points) > 1:
+            filtered_points = [current_points[0]]
+            for i in range(1, len(current_points)):
+                prev_x, prev_y = current_points[i-1]
+                curr_x, curr_y = current_points[i]
+                if (abs(curr_x - prev_x) > 1e-6 or abs(curr_y - prev_y) > 1e-6):
+                    filtered_points.append(current_points[i])
+            current_points = filtered_points
+
+        # Cache the result
+        self._points_cache = current_points
+        return current_points
+
+    def _should_cleanup(self, current_time):
+        """Determine if cleanup is needed"""
+        return (self.auto_cleanup and
+                current_time - self._last_cleanup_time > self.cleanup_interval)
+
+    def _cleanup_old_data(self):
+        """Clean up cached data"""
+        try:
+            # Clear points cache to force refresh
+            self._points_cache = []
+            Logger.debug("OptimizedSmoothLinePlot: Cleanup completed")
+        except Exception as e:
+            Logger.warning(f"OptimizedSmoothLinePlot: Cleanup failed: {e}")
+
+    def _periodic_cleanup(self, dt):
+        """Periodic cleanup called by Clock"""
+        if not self._is_drawing and self.auto_cleanup:
+            try:
+                current_time = Clock.get_time()
+                if current_time - self._last_cleanup_time > self.cleanup_interval:
+                    self._cleanup_old_data()
+                    self._last_cleanup_time = current_time
+            except Exception as e:
+                Logger.warning(f"OptimizedSmoothLinePlot: Periodic cleanup failed: {e}")
+
+    def create_legend_drawings(self):
+        """Create legend drawings"""
+        try:
+            from kivy.garden.graph import LinePlot
+            return LinePlot.create_legend_drawings(self)
+        except Exception as e:
+            Logger.warning(f"OptimizedSmoothLinePlot: Legend creation failed: {e}")
+            return []
+
+    def draw_legend(self, center, maximum_size):
+        """Draw legend"""
+        try:
+            if self._gline:
+                self.line_width = self._gline.width
+            from kivy.garden.graph import LinePlot
+            return LinePlot.draw_legend(self, center, maximum_size)
+        except Exception as e:
+            Logger.warning(f"OptimizedSmoothLinePlot: Legend drawing failed: {e}")
+
+    # Property handlers
+    def on_color(self, instance, value):
+        """Handle color changes"""
+        if self._gcolor:
+            self._gcolor.rgba = value
+
+    def on_line_width(self, instance, value):
+        """Handle line width changes"""
+        if self._gline:
+            self._gline.width = value
+
+    def on_enable_antialiasing(self, instance, value):
+        """Handle AA setting changes"""
+        self._setup_texture()
+        self.force_refresh()
+
+    # Convenience methods
+    def set_rendering_mode(self, mode='balanced'):
+        """Set predefined rendering modes"""
+        modes = {
+            'performance': {
+                'enable_antialiasing': False,
+                'max_points': 1000,
+                'cleanup_interval': 15.0
+            },
+            'balanced': {
+                'enable_antialiasing': True,
+                'max_points': 2000,
+                'cleanup_interval': 30.0
+            },
+            'quality': {
+                'enable_antialiasing': True,
+                'max_points': 3000,
+                'cleanup_interval': 45.0
+            }
+        }
+
+        if mode in modes:
+            for key, value in modes[mode].items():
+                setattr(self, key, value)
+            Logger.info(f"OptimizedSmoothLinePlot: Set rendering mode to '{mode}'")
+        else:
+            Logger.warning(f"OptimizedSmoothLinePlot: Unknown mode '{mode}'. Available: {list(modes.keys())}")
+
+    def force_refresh(self):
+        """Force recreation of drawing instructions"""
+        self._points_cache = []  # Clear cache to force update
+        Logger.info("OptimizedSmoothLinePlot: Force refresh requested")
+
+    def get_stats(self):
+        """Get performance and debugging information"""
+        return {
+            'draw_count': self._draw_count,
+            'cached_points': len(self._points_cache),
+            'actual_points': len(list(self.iterate_points())) if hasattr(self, 'iterate_points') else 0,
+            'last_cleanup': self._last_cleanup_time,
+            'antialiasing': self.enable_antialiasing,
+            'texture_available': self._texture is not None,
+            'line_width': self.line_width,
+            'max_points': self.max_points,
+            'shared_texture_refs': self._texture_refs
+        }
+
+    def optimize_for_realtime(self, target_fps=60):
+        """Optimize settings for real-time plotting"""
+        if target_fps >= 60:
+            self.set_rendering_mode('performance')
+            self.max_points = min(800, self.max_points)
+        elif target_fps >= 30:
+            self.set_rendering_mode('balanced')
+            self.max_points = min(1500, self.max_points)
+        else:
+            self.set_rendering_mode('quality')
+            self.max_points = min(2500, self.max_points)
+
+        Logger.info(f"OptimizedSmoothLinePlot: Optimized for {target_fps} FPS")
+
+    def __del__(self):
+        """Cleanup when instance is destroyed"""
+        try:
+            # Cancel cleanup timer
+            Clock.unschedule(self._periodic_cleanup)
+            # Release texture reference
+            self._release_shared_texture()
+            # Clear graphics
+            if self._grc:
+                self._grc.clear()
+        except:
+            pass  # Ignore cleanup errors during destruction
+
 
 class ContourPlot(Plot):
-    """
-    ContourPlot visualizes 3 dimensional data as an intensity map image.
+    """ContourPlot visualizes 3 dimensional data as an intensity map image.
+
     The user must first specify 'xrange' and 'yrange' (tuples of min,max) and
     then 'data', the intensity values.
     `data`, is a MxN matrix, where the first dimension of size M specifies the
@@ -1665,30 +2114,31 @@ class ContourPlot(Plot):
 
     def __init__(self, **kwargs):
         super(ContourPlot, self).__init__(**kwargs)
-        self.bind(data=self.ask_draw, xrange=self.ask_draw,
-                  yrange=self.ask_draw)
+        self.bind(data=self.ask_draw, xrange=self.ask_draw, yrange=self.ask_draw)
 
     def create_drawings(self):
+        """Create the drawing instructions for the contour plot."""
         self._image = Rectangle()
         self._color = Color([1, 1, 1, 1])
-        self.bind(
-            color=lambda instr, value: setattr(self._color, 'rgba', value))
+        self.bind(color=lambda instr, value: setattr(self._color, 'rgba', value))
         return [self._color, self._image]
 
     def draw(self, *args):
+        """Draw the contour plot."""
         super(ContourPlot, self).draw(*args)
         data = self.data
         xdim, ydim = data.shape
 
         # Find the minimum and maximum z values
-        zmax = data.max()
-        zmin = data.min()
+        zmax, zmin = data.max(), data.min()
         rgb_scale_factor = 1.0 / (zmax - zmin) * 255
+
         # Scale the z values into RGB data
         buf = np.array(data, dtype=float, copy=True)
         np.subtract(buf, zmin, out=buf)
         np.multiply(buf, rgb_scale_factor, out=buf)
-        # Duplicate into 3 dimensions (RGB) and convert to byte array
+
+        # Convert to RGB byte array
         buf = np.asarray(buf, dtype=np.uint8)
         buf = np.expand_dims(buf, axis=2)
         buf = np.concatenate((buf, buf, buf), axis=2)
@@ -1697,40 +2147,40 @@ class ContourPlot(Plot):
         charbuf = bytearray(np.reshape(buf, (buf.size)))
         self._texture = Texture.create(size=(xdim, ydim), colorfmt='rgb')
         self._texture.blit_buffer(charbuf, colorfmt='rgb', bufferfmt='ubyte')
+
+        # Update image position and size
         image = self._image
         image.texture = self._texture
 
-        x_px = self.x_px()
-        y_px = self.y_px()
+        x_px, y_px = self.x_px(), self.y_px()
         bl = x_px(self.xrange[0]), y_px(self.yrange[0])
         tr = x_px(self.xrange[1]), y_px(self.yrange[1])
         image.pos = bl
-        w = tr[0] - bl[0]
-        h = tr[1] - bl[1]
-        image.size = (w, h)
+        image.size = (tr[0] - bl[0], tr[1] - bl[1])
 
 
 class BarPlot(Plot):
-    '''BarPlot class which displays a bar graph.
-    '''
+    """BarPlot class which displays a bar graph."""
 
     bar_width = NumericProperty(1)
-    bar_spacing = NumericProperty(1.)
-    graph = ObjectProperty(allownone=True)
+    """Width of individual bars."""
 
-    def __init__(self, *ar, **kw):
-        super(BarPlot, self).__init__(*ar, **kw)
+    bar_spacing = NumericProperty(1.)
+    """Spacing factor between bars."""
+
+    graph = ObjectProperty(allownone=True)
+    """Reference to the parent graph."""
+
+    def __init__(self, *args, **kwargs):
+        super(BarPlot, self).__init__(*args, **kwargs)
         self.bind(bar_width=self.ask_draw)
         self.bind(bar_width=lambda *_: self.draw_legend())
         self.bind(points=self.update_bar_width)
         self.bind(graph=self.update_bar_width)
 
-    def update_bar_width(self, *ar):
-        if not self.graph:
-            return
-        if len(self.points) < 2:
-            return
-        if self.graph.xmax == self.graph.xmin:
+    def update_bar_width(self, *args):
+        """Update bar width based on graph dimensions and data points."""
+        if not self.graph or len(self.points) < 2 or self.graph.xmax == self.graph.xmin:
             return
 
         point_width = (
@@ -1738,45 +2188,50 @@ class BarPlot(Plot):
             float(abs(self.graph.xmax) + abs(self.graph.xmin)) /
             float(abs(max(self.points)[0]) + abs(min(self.points)[0])))
 
-        if not self.points:
-            self.bar_width = 1
-        else:
+        if self.points:
             self.bar_width = (
                 (self.graph.width - self.graph.padding) /
                 point_width * self.bar_spacing)
+        else:
+            self.bar_width = 1
 
     def create_drawings(self):
+        """Create the drawing instructions for the bar plot."""
         self._color = Color(*self.color)
         self._mesh = Mesh()
-        self.bind(
-            color=lambda instr, value: setattr(self._color, 'rgba', value))
+        self.bind(color=lambda instr, value: setattr(self._color, 'rgba', value))
         return [self._color, self._mesh]
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         self._rectangle = Rectangle()
         return [self._color, self._rectangle]
 
     def draw_legend(self, center=None, maximum_size=None):
+        """Draw the legend marker for this plot."""
         if not hasattr(self, "_rectangle"):
             return
-        self._legend_maximum_size = maximum_size = maximum_size or self._legend_maximum_size
+
+        self._legend_maximum_size = maximum_size = maximum_size or getattr(self, '_legend_maximum_size', (20, 12))
         width = min(self.bar_width, maximum_size[0]) if self.bar_width >= 0 else maximum_size[0]
         height = maximum_size[1]
+
         if center:
             x = center[0] - width / 2
             y = center[1] - height / 2
         else:
             y = self._rectangle.pos[1]
             x = self._rectangle.pos[0] - width / 2 + self._rectangle.size[0] / 2
+
         self._rectangle.pos = x, y
         self._rectangle.size = width, height
 
-
     def draw(self, *args):
+        """Draw the bar plot."""
         super(BarPlot, self).draw(*args)
         points = self.points
 
-        # The mesh only supports (2^16) - 1 indices, so...
+        # Mesh only supports (2^16) - 1 indices
         if len(points) * 6 > 65535:
             Logger.error(
                 "BarPlot: cannot support more than 10922 points. "
@@ -1789,6 +2244,7 @@ class BarPlot(Plot):
         vert = mesh.vertices
         ind = mesh.indices
         diff = len(points) * 6 - len(vert) // 4
+
         if diff < 0:
             del vert[24 * point_len:]
             del ind[point_len:]
@@ -1797,8 +2253,7 @@ class BarPlot(Plot):
             vert.extend([0] * (diff * 4))
 
         bounds = self.get_px_bounds()
-        x_px = self.x_px()
-        y_px = self.y_px()
+        x_px, y_px = self.x_px(), self.y_px()
         ymin = y_px(0)
 
         bar_width = self.bar_width
@@ -1807,108 +2262,92 @@ class BarPlot(Plot):
 
         for k in range(point_len):
             p = points[k]
-            x1 = x_px(p[0])
-            x2 = x1 + bar_width
-            y1 = ymin
-            y2 = y_px(p[1])
+            x1, x2 = x_px(p[0]), x_px(p[0]) + bar_width
+            y1, y2 = ymin, y_px(p[1])
 
             idx = k * 24
-            # first triangle
-            vert[idx] = x1
-            vert[idx + 1] = y2
-            vert[idx + 4] = x1
-            vert[idx + 5] = y1
-            vert[idx + 8] = x2
-            vert[idx + 9] = y1
-            # second triangle
-            vert[idx + 12] = x1
-            vert[idx + 13] = y2
-            vert[idx + 16] = x2
-            vert[idx + 17] = y2
-            vert[idx + 20] = x2
-            vert[idx + 21] = y1
+            # First triangle
+            vert[idx:idx+12] = [x1, y2, 0, 0, x1, y1, 0, 0, x2, y1, 0, 0]
+            # Second triangle
+            vert[idx+12:idx+24] = [x1, y2, 0, 0, x2, y2, 0, 0, x2, y1, 0, 0]
+
         mesh.vertices = vert
 
     def _unbind_graph(self, graph):
+        """Unbind from graph events."""
         graph.unbind(width=self.update_bar_width,
-                     xmin=self.update_bar_width,
-                     ymin=self.update_bar_width)
+                    xmin=self.update_bar_width,
+                    ymin=self.update_bar_width)
 
     def bind_to_graph(self, graph):
+        """Bind to graph for automatic updates."""
         old_graph = self.graph
 
         if old_graph:
-            # unbind from the old one
             self._unbind_graph(old_graph)
 
-        # bind to the new one
+        # Bind to the new graph
         self.graph = graph
         graph.bind(width=self.update_bar_width,
-                   xmin=self.update_bar_width,
-                   ymin=self.update_bar_width)
+                  xmin=self.update_bar_width,
+                  ymin=self.update_bar_width)
 
     def unbind_from_graph(self):
+        """Unbind from current graph."""
         if self.graph:
             self._unbind_graph(self.graph)
 
 
 class HBar(MeshLinePlot):
-    '''HBar draw horizontal bar on all the Y points provided
-    '''
+    """HBar draws horizontal bars on all the Y points provided."""
 
     def plot_mesh(self, *args):
+        """Update the mesh with horizontal bar data."""
         points = self.points
         mesh, vert, ind = self.set_mesh_size(len(points) * 2)
         mesh.mode = "lines"
 
         bounds = self.get_px_bounds()
-        px_xmin = bounds["xmin"]
-        px_xmax = bounds["xmax"]
+        px_xmin, px_xmax = bounds["xmin"], bounds["xmax"]
         y_px = self.y_px()
+
         for k, y in enumerate(points):
             y = y_px(y)
-            vert[k * 8] = px_xmin
-            vert[k * 8 + 1] = y
-            vert[k * 8 + 4] = px_xmax
-            vert[k * 8 + 5] = y
+            vert[k * 8:k * 8 + 8] = [px_xmin, y, 0, 0, px_xmax, y, 0, 0]
         mesh.vertices = vert
 
 
 class VBar(MeshLinePlot):
-    '''VBar draw vertical bar on all the X points provided
-    '''
+    """VBar draws vertical bars on all the X points provided."""
 
     def plot_mesh(self, *args):
+        """Update the mesh with vertical bar data."""
         points = self.points
         mesh, vert, ind = self.set_mesh_size(len(points) * 2)
         mesh.mode = "lines"
 
         bounds = self.get_px_bounds()
-        px_ymin = bounds["ymin"]
-        px_ymax = bounds["ymax"]
+        px_ymin, px_ymax = bounds["ymin"], bounds["ymax"]
         x_px = self.x_px()
+
         for k, x in enumerate(points):
             x = x_px(x)
-            vert[k * 8] = x
-            vert[k * 8 + 1] = px_ymin
-            vert[k * 8 + 4] = x
-            vert[k * 8 + 5] = px_ymax
+            vert[k * 8:k * 8 + 8] = [x, px_ymin, 0, 0, x, px_ymax, 0, 0]
         mesh.vertices = vert
 
 
 class ScatterPlot(Plot):
-    """
-    ScatterPlot draws using a standard Point object.
+    """ScatterPlot draws using a standard Point object.
     The pointsize can be controlled with :attr:`point_size`.
 
     >>> plot = ScatterPlot(color=[1, 0, 0, 1], point_size=5)
     """
 
     point_size = NumericProperty(1)
-    """The point size of the scatter points. Defaults to 1.
-    """
+    """The point size of the scatter points. Defaults to 1."""
 
     def create_drawings(self):
+        """Create the drawing instructions for the scatter plot."""
         from kivy.graphics import Point, RenderContext
 
         self._points_context = RenderContext(
@@ -1921,6 +2360,7 @@ class ScatterPlot(Plot):
         return [self._points_context]
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         from kivy.graphics import Point, RenderContext
 
         self._points_legend_context = RenderContext(
@@ -1933,16 +2373,19 @@ class ScatterPlot(Plot):
         return [self._points_legend_context]
 
     def draw(self, *args):
+        """Draw the scatter plot."""
         super(ScatterPlot, self).draw(*args)
-        # flatten the list
+        # Flatten the point list
         self._gpts.points = list(chain(*self.iterate_points()))
 
     def draw_legend(self, center, maximum_size):
+        """Draw the legend marker for this plot."""
         self._maximum_legend_point_size = min(maximum_size) / 2
         self._gpts_legend.pointsize = min(self._maximum_legend_point_size, self.point_size)
         self._gpts_legend.points = center
 
     def on_point_size(self, *largs):
+        """Handle point size changes."""
         if hasattr(self, "_gpts"):
             self._gpts.pointsize = self.point_size
         if hasattr(self, "_maximum_legend_point_size"):
@@ -1950,17 +2393,10 @@ class ScatterPlot(Plot):
 
 
 class PointPlot(Plot):
-    '''Displays a set of points.
-    '''
+    """Displays a set of points."""
 
     point_size = NumericProperty(1)
-    '''
-    Defaults to 1.
-    '''
-
-    _color = None
-
-    _point = None
+    """Point size, defaults to 1."""
 
     def __init__(self, **kwargs):
         super(PointPlot, self).__init__(**kwargs)
@@ -1978,19 +2414,23 @@ class PointPlot(Plot):
         self.fbind('color', update_color)
 
     def create_drawings(self):
+        """Create the drawing instructions for the point plot."""
         self._color = Color(*self.color)
         self._point = Point(pointsize=self.point_size)
         return [self._color, self._point]
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         self._point_legend = Point()
         return [self._color, self._point_legend]
 
     def draw(self, *args):
+        """Draw the point plot."""
         super(PointPlot, self).draw(*args)
         self._point.points = [v for p in self.iterate_points() for v in p]
 
     def draw_legend(self, center, maximum_size):
+        """Draw the legend marker for this plot."""
         self._maximum_legend_point_size = min(maximum_size) / 2
         self._point_legend.pointsize = min(self._maximum_legend_point_size, self.point_size)
         self._point_legend.points = center
@@ -2008,7 +2448,7 @@ class LineAndMarkerPlot(Plot):
 
     marker_shape: str = OptionProperty(None, allownone=True, options=[None, *'x+*-|<>v^osdOSD'])
     """The shape of the marker.
-    
+
     The following values are allowed:
         None:   no marker
         'x':    cross
@@ -2026,86 +2466,82 @@ class LineAndMarkerPlot(Plot):
         'O':    filled circle
         'S':    filled square
         'D':    filled diamond
-    
+
     :data:`marker_shape` is a :class:`kivy.properties.OptionProperty`
     and defaults to None.
     """
 
     marker_size: float = BoundedNumericProperty(dp(12), min=0)
     """Size of a single marker as the side length of a surrounding square.
-    
+
     For markers, that are drawn as a line, e. g. 'o' or 's' markers, the actual
     outermost size will be :data:`marker_size` + 2 * :data:`marker_line_width`, because
     half the line will exceed the square defined by marker_size * marker_size.
-    
+
     :data:`marker_size` is a :class:`kivy.properties.BoundedNumericProperty`
     with a minimum of 0 and defaults to 12 dp.
     """
 
     marker_line_width: float = BoundedNumericProperty(dp(1.5), min=0)
     """The line width with which the markers are drawn.
-    
+
     For filled markers this value is ignored.
-    
+
     :data:`marker_line_width` is a :class:`kivy.properties.BoundedNumericProperty`
     with a minimum of 0 and defaults to 1.5 dp.
     """
 
     line_width: float = BoundedNumericProperty(dp(1.1), min=0)
     """Line width of the line connecting the markers.
-    
+
     :data:`line_width` is a :class:`kivy.properties.BoundedNumericProperty`
     with a minimum of 0 and defaults to 1.1 dp.
     """
 
     marker_color = ColorProperty(None, allownone=True)
     """Color of the markers.
-    
+
     May be set to None, in which case the markers are drawn with the same
     color as the line, i. e. the color defines by :data:`color`.
-    
+
     :data:`marker_color` is a :class:`kivy.properties.ColorProperty`
     and defaults to None.
     """
 
     legend_display = OptionProperty('marker', options=('marker', 'both', 'line'))
     """How to display this plot in the legend.
-    
+
     Options:
         'marker':   Displays only the marker if :data:`marker_shape` is not None
                     and only the line otherwise.
         'both':     Displays line and marker.
         'line':     Displays only the line.
-    
+
     :data:`legend_display` is a :class:`kivy.properties.OptionProperty`
     and defaults to 'marker'.
     """
 
     def __init__(self, **kwargs):
+        # Initialize drawing instruction references
+        self._color: Optional[Color] = None  # Color drawing instruction
+        self._marker_color: Optional[Color] = None  # Marker color drawing instruction
+        self._line: Optional[Line] = None  # Drawing instruction for the line connecting the markers
+        self._marker_group: Optional[InstructionGroup] = None  # Instruction group for markers
 
-        # The following are set in self.create_drawings.
-        self._color: Optional[Color] = None  # color drawing instruction
-        self._marker_color: Optional[Color] = None  # marker_color drawing instruction
-        self._line: Optional[Line] = None  # drawing instruction for the line connecting the markers
-        # instruction group holding drawing instructions for the single markers
-        self._marker_group: Optional[InstructionGroup] = None
-
-        # instruction group holding drawing instructions for legend.
+        # Legend-related attributes
         self._legend_group: Optional[InstructionGroup] = None
         self._legend_line: Optional[Line] = None
         self._legend_marker: Optional[Instruction] = None
-        # store legend marker center and max size
         self._legend_marker_center: Optional[Tuple[float, float]] = None
         self._legend_maximum_drawing_size: Optional[Tuple[float, float]] = None
 
-        # list of drawing instructions for the plot markers
+        # List of drawing instructions for plot markers
         self._markers: List[Instruction] = []
 
-        # call super
+        # Call super constructor
         super().__init__(**kwargs)
 
-        # In the following we do all the bindings so that the plot is always up to date.
-
+        # Bind property updates
         def update_marker_line_width(*_):
             for p in self._markers:
                 if isinstance(p, Line):
@@ -2115,18 +2551,17 @@ class LineAndMarkerPlot(Plot):
         self.fbind('marker_line_width', update_marker_line_width)
 
         def update_line_width(*_):
-            self._line.width = self.line_width
+            if self._line:
+                self._line.width = self.line_width
             if self._legend_line:
                 self._legend_line.width = min(self.line_width, self._legend_maximum_drawing_size[1] / 2)
         self.fbind('line_width', update_line_width)
 
-        # When the marker size changes, the endpoints of the marker lines change, so redraw.
+        # Redraw when marker properties change
         self.fbind('marker_size', lambda *_: self.draw_markers())
         self.fbind('marker_size', lambda *_: self.draw_legend())
-        # When the shape of the markers changes, the Marker Line class may change, so create markers new and draw them.
         self.fbind('marker_shape', lambda *_: self.draw_markers(force_new=True))
         self.fbind('marker_shape', lambda *_: self.draw_legend(force_new=True))
-        # Redraw legend, when legend_display changes.
         self.fbind('legend_display', lambda *_: self.draw_legend(force_new=True))
 
         def update_color(*_):
@@ -2137,7 +2572,7 @@ class LineAndMarkerPlot(Plot):
         self.fbind('marker_color', update_color)
 
     def create_drawings(self):
-        # superclass method
+        """Create the drawing instructions for the line and marker plot."""
         self._color = Color(*self.color)
         self._line = SmoothLine(width=self.line_width)
         self._marker_color = Color(*(self.marker_color or self.color))
@@ -2145,21 +2580,15 @@ class LineAndMarkerPlot(Plot):
         return [self._color, self._line, self._marker_color, self._marker_group]
 
     def draw(self, *_):
-        # call superclass method
+        """Draw the line and markers."""
         super().draw()
-        # Set the line's points.
-        # They have to be simplified (see method's doc).
-        # They need another format: [(x0, y0), (x1, y1), ...] -> [x0, y0, x1, y1, ...]
+        # Set the line's points (simplified and flattened)
         self._line.points = [xy for p in self.simplify_points(list(self.iterate_points())) for xy in p]
-        # Update all the markers of the plot.
+        # Update all markers
         self.draw_markers()
 
     def get_marker(self):
-        # This method returns a single marker.
-        # We want to use SmoothLine in most cases,
-        # but for some shapes we cannot use
-        # simplify_points, since the line crosses itself.
-        # So SmoothLine Does not work and we fall back to Line.
+        """Return a single marker drawing instruction based on marker_shape."""
         shape = self.marker_shape
         if shape is None:
             return Instruction()
@@ -2178,74 +2607,92 @@ class LineAndMarkerPlot(Plot):
         raise NotImplementedError()
 
     def draw_markers(self, force_new=False):
-
+        """Draw all markers for the current points."""
         super().draw()
 
-        # Delete unneccessary markers.
+        # Remove excess markers
         while len(self.points) < len(self._markers) or (force_new and self._markers):
             self._marker_group.remove(self._markers.pop())
 
-        # While we have less markers than needed, instantiate new ones.
+        # Add new markers as needed
         while len(self.points) > len(self._markers):
-            # Keep references in self._markers, to change their position and shape.
             self._markers.append(self.get_marker())
-            # Each marker is a drawing instruction that needs to be added to the correct InstructionGroup
-            # in order to be displayed.
             self._marker_group.add(self._markers[-1])
 
+        # Update marker positions
         for marker, point in zip(self._markers, self.iterate_points()):
             self.draw_marker(marker, self.marker_size, *point)
 
     @staticmethod
     def simplify_points(points: List[Tuple[float, float]]):
-        """Delete points in a list that lie exactly on the line connecting it's two adjacent points.
+        """Delete points that lie exactly on the line connecting adjacent points.
 
-        This is needed due to a bug in class´SmoothLine´.
+        This is needed due to a bug in SmoothLine class.
         """
         points = points.copy()
         i = 0
         while len(points) > i + 2:
-            if 1e-5 > abs((points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]) -
-                          (points[i + 2][1] - points[i][1]) / (points[i + 2][0] - points[i][0])):
-                points.pop(i + 1)
-            else:
+            # Check if three consecutive points are collinear
+            try:
+                slope1 = (points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0])
+                slope2 = (points[i + 2][1] - points[i][1]) / (points[i + 2][0] - points[i][0])
+                if abs(slope1 - slope2) < 1e-5:
+                    points.pop(i + 1)
+                else:
+                    i += 1
+            except ZeroDivisionError:
                 i += 1
         return points
 
     def draw_marker(self, marker: Instruction, s, x, y):
-        # Set the line's points according to the desired position of the marker.
+        """Draw a single marker at the specified position."""
         shape = self.marker_shape
         if shape is None:
             return
-        x, cx, r = x - s / 2, x, x + s / 2
-        y, cy, t = y - s / 2, y, y + s / 2
+
+        # Calculate marker bounds
+        x_left, x_right = x - s / 2, x + s / 2
+        y_bottom, y_top = y - s / 2, y + s / 2
         d = .5 * sqrt(.5) * s
+
+        # Set marker geometry based on shape
         if shape in 'x+*-|<>v^sd':
-            marker.points = \
-                (x, y, r, t, cx, cy, x, t, r, y) if shape == 'x' else \
-                (x, cy, r, cy, cx, cy, cx, y, cx, t) if shape == '+' else \
-                (x, cy, r, cy, cx, cy, cx, y, cx, t, cx, cy, cx - d, cy - d, cx + d, cy + d, cx, cy, cx - d, cy + d, cx + d, cy - d) \
-                    if shape == '*' else \
-                (x, cy, r, cy) if shape == '-' else \
-                (cx, y, cx, t) if shape == '|' else \
-                (x, y, r, cy, x, t) if shape == '>' else \
-                (r, y, x, cy, r, t) if shape == '<' else \
-                (x, t, cx, y, r, t) if shape == 'v' else \
-                (x, y, cx, t, r, y) if shape == '^' else \
-                (x, y, x, t, r, t, r, y, x, y, x, t) if shape == 's' else \
-                (x, cy, cx, t, r, cy, cx, y, x, cy, cx, t) if shape == 'd' else \
-                NotImplemented
+            if shape == 'x':
+                points = (x_left, y_bottom, x_right, y_top, x, y, x_left, y_top, x_right, y_bottom)
+            elif shape == '+':
+                points = (x_left, y, x_right, y, x, y, x, y_bottom, x, y_top)
+            elif shape == '*':
+                points = (x_left, y, x_right, y, x, y, x, y_bottom, x, y_top, x, y,
+                         x - d, y - d, x + d, y + d, x, y, x - d, y + d, x + d, y - d)
+            elif shape == '-':
+                points = (x_left, y, x_right, y)
+            elif shape == '|':
+                points = (x, y_bottom, x, y_top)
+            elif shape == '>':
+                points = (x_left, y_bottom, x_right, y, x_left, y_top)
+            elif shape == '<':
+                points = (x_right, y_bottom, x_left, y, x_right, y_top)
+            elif shape == 'v':
+                points = (x_left, y_top, x, y_bottom, x_right, y_top)
+            elif shape == '^':
+                points = (x_left, y_bottom, x, y_top, x_right, y_bottom)
+            elif shape == 's':
+                points = (x_left, y_bottom, x_left, y_top, x_right, y_top, x_right, y_bottom, x_left, y_bottom, x_left, y_top)
+            elif shape == 'd':
+                points = (x_left, y, x, y_top, x_right, y, x, y_bottom, x_left, y, x, y_top)
+            marker.points = points
         elif shape == 'o':
-            marker.ellipse = (x, y, s, s)
+            marker.ellipse = (x_left, y_bottom, s, s)
         elif shape in 'OS':
-            marker.pos = x, y
+            marker.pos = x_left, y_bottom
             marker.size = s, s
         elif shape == 'D':
-            marker.vertices = (x, cy, 0, 0, cx, t, 0, 0, r, cy, 0, 0, cx, y, 0, 0)
+            marker.vertices = (x_left, y, 0, 0, x, y_top, 0, 0, x_right, y, 0, 0, x, y_bottom, 0, 0)
         else:
             raise NotImplementedError()
 
     def create_legend_drawings(self):
+        """Create the drawing instructions for the legend."""
         self._legend_line = SmoothLine(width=self.line_width)
         self._legend_marker = self.get_marker()
         self._legend_group = InstructionGroup()
@@ -2256,24 +2703,35 @@ class LineAndMarkerPlot(Plot):
         return [self._legend_group]
 
     def draw_legend(self, center=None, maximum_size=None, force_new=False):
+        """Draw the legend representation."""
         self._legend_maximum_drawing_size = maximum_size = maximum_size or self._legend_maximum_drawing_size
         self._legend_marker_center = center = center or self._legend_marker_center
+
         if not center:
             return
+
+        # Recreate marker if needed
         if force_new:
             if self._legend_marker:
                 self._legend_group.remove(self._legend_marker)
                 self._legend_marker = None
-            if not self.legend_display == 'line':
+            if self.legend_display != 'line':
                 self._legend_marker = self.get_marker()
                 self._legend_group.add(self._legend_marker)
+
+        # Draw marker
         if self._legend_marker:
             marker_size = min(self.marker_size, *maximum_size)
             self.draw_marker(self._legend_marker, marker_size, *center)
-        self._legend_line.points = \
-            [] if self.legend_display == 'marker' and self.marker_shape else \
-            [center[0] - maximum_size[0] / 2, center[1],
-             center[0] + maximum_size[0] / 2, center[1]]
+
+        # Draw line
+        if self.legend_display == 'marker' and self.marker_shape:
+            self._legend_line.points = []
+        else:
+            self._legend_line.points = [
+                center[0] - maximum_size[0] / 2, center[1],
+                center[0] + maximum_size[0] / 2, center[1]
+            ]
 
 
 if __name__ == '__main__':
@@ -2288,16 +2746,17 @@ if __name__ == '__main__':
 
         def build(self):
             b = BoxLayout(orientation='vertical')
-            # example of a custom theme
+
+            # Example of a custom theme
             colors = itertools.cycle([
                 rgb('7dac9f'), rgb('dc7062'), rgb('66a8d4'), rgb('e5b060')])
             graph_theme = {
                 'label_options': {
-                    'color': rgb('444444'),  # color of tick labels and titles
+                    'color': rgb('444444'),  # Color of tick labels and titles
                     'bold': True},
-                'background_color': rgb('f8f8f2'),  # canvas background color
-                'tick_color': rgb('808080'),  # ticks and grid
-                'border_color': rgb('808080')}  # border drawn around each graph
+                'background_color': rgb('f8f8f2'),  # Canvas background color
+                'tick_color': rgb('808080'),  # Ticks and grid
+                'border_color': rgb('808080')}  # Border drawn around each graph
 
             graph = Graph(
                 xlabel='Cheese',
@@ -2320,13 +2779,13 @@ if __name__ == '__main__':
 
             plot = SmoothLinePlot(color=next(colors))
             plot.points = [(x / 10., sin(x / 50.)) for x in range(-500, 501)]
-            # for efficiency, the x range matches xmin, xmax
+            # For efficiency, the x range matches xmin, xmax
             graph.add_plot(plot)
 
             plot = MeshLinePlot(color=next(colors))
             plot.points = [(x / 10., cos(x / 50.)) for x in range(-500, 501)]
             graph.add_plot(plot)
-            self.plot = plot  # this is the moving graph, so keep a reference
+            self.plot = plot  # Keep reference for moving graph
 
             plot = MeshStemPlot(color=next(colors))
             graph.add_plot(plot)
@@ -2380,10 +2839,11 @@ if __name__ == '__main__':
             return b
 
         def make_contour_data(self, ts=0):
+            """Generate sample contour data."""
             omega = 2 * pi / 30
             k = (2 * pi) / 2.0
 
-            ts = sin(ts * 2) + 1.5  # emperically determined 'pretty' values
+            ts = sin(ts * 2) + 1.5  # Empirically determined 'pretty' values
             npoints = 100
             data = np.ones((npoints, npoints))
 
@@ -2392,24 +2852,24 @@ if __name__ == '__main__':
 
             for ii, t in enumerate(time):
                 for jj, x in enumerate(position):
-                    data[ii, jj] = sin(
-                        k * x + omega * t) + sin(-k * x + omega * t) / ts
+                    data[ii, jj] = sin(k * x + omega * t) + sin(-k * x + omega * t) / ts
             return (0, max(position)), (0, max(time)), data
 
         def update_points(self, *args):
+            """Update plot points for animation."""
             self.plot.points = [
                 (x / 10., cos(Clock.get_time() + x / 50.))
                 for x in range(-500, 501)]
 
         def update_contour(self, *args):
-            _, _, self.contourplot.data[:] = self.make_contour_data(
-                Clock.get_time())
-            # this does not trigger an update, because we replace the
-            # values of the arry and do not change the object.
+            """Update contour plot data for animation."""
+            _, _, self.contourplot.data[:] = self.make_contour_data(Clock.get_time())
+            # This does not trigger an update, because we replace the
+            # values of the array and do not change the object.
             # However, we cannot do "...data = make_contour_data()" as
             # kivy will try to check for the identity of the new and
-            # old values.  In numpy, 'nd1 == nd2' leads to an error
-            # (you have to use np.all).  Ideally, property should be patched
+            # old values. In numpy, 'nd1 == nd2' leads to an error
+            # (you have to use np.all). Ideally, property should be patched
             # for this.
             self.contourplot.ask_draw()
 
