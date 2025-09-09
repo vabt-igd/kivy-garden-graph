@@ -1,23 +1,25 @@
 """See README.md for package documentation."""
 
 from setuptools import setup, find_namespace_packages
-
 from io import open
 from os import path
 
 here = path.abspath(path.dirname(__file__))
 
+# Version
 filename = path.join(here, 'kivy_garden', 'graph', '_version.py')
 locals = {}
 with open(filename, "rb") as fh:
     exec(compile(fh.read(), filename, 'exec'), globals(), locals)
 __version__ = locals['__version__']
 
+# README 
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
-URL = 'https://github.com/HoerTech-gGmbH/kivy-garden-graph'
+URL = 'https://github.com/vabt-igd/kivy-garden-graph'
 
+# Build
 setup(
     name='kivy_garden.graph',
     version=__version__,
@@ -36,19 +38,19 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
     ],
     keywords='Kivy kivy-garden',
-
     packages=find_namespace_packages(include=['kivy_garden.*']),
     install_requires=[],
     extras_require={
-        'dev': ['pytest>=3.6', 'pytest-cov', 'pytest-asyncio',
-                'sphinx_rtd_theme'],
+        'dev': ['pytest>=3.6', 'pytest-cov', 'pytest-asyncio', 'sphinx_rtd_theme'],
         'ci': ['coveralls', 'pycodestyle'],
     },
-    package_data={},
-    data_files=[],
-    entry_points={},
+    python_requires='>=3.5',
     project_urls={
         'Bug Reports': URL + '/issues',
         'Source': URL,
