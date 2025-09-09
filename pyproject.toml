@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kivy_garden.graph"
+dynamic = ["version"]
+description = "Display plots in kivy."
+readme = "README.md"
+authors = [
+    {name = "Kivy", email = "kivy@kivy.org"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.5",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+keywords = ["Kivy", "kivy-garden"]
+requires-python = ">=3.5"
+
+[project.optional-dependencies]
+dev = ["pytest>=3.6", "pytest-cov", "pytest-asyncio", "sphinx_rtd_theme"]
+ci = ["coveralls", "pycodestyle"]
+
+[project.urls]
+Homepage = "https://github.com/vabt-igd/kivy-garden-graph"
+"Bug Reports" = "https://github.com/vabt-igd/kivy-garden-graph/issues"
+Source = "https://github.com/vabt-igd/kivy-garden-graph"
+
+[tool.setuptools.dynamic]
+version = {attr = "kivy_garden.graph._version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["kivy_garden.*"]
