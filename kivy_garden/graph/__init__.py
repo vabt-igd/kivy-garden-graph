@@ -698,10 +698,17 @@ class Graph(Widget):
         vert = mesh.vertices
 
         if self.draw_border:
-            s0, s1, s2, s3 = size
-            vert[0:20] = [s0, s1, s2, s1, s2, s3, s0, s3, s0, s1] * 2
+            s0, s1, s2, s3 = size  # left, bottom, right, top
+            vert[0:20] = [
+                s0, s1, 0, 0,   # bottom-left
+                s2, s1, 0, 0,   # bottom-right
+                s2, s3, 0, 0,   # top-right
+                s0, s3, 0, 0,   # top-left
+                s0, s1, 0, 0    # close
+            ]
+            mesh.indices = list(range(5))
         else:
-            vert[0:18] = [0] * 18
+            vert[0:20] = [0] * 20
         mesh.vertices = vert
 
         # Update tick positions
