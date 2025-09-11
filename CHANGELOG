@@ -1,4 +1,49 @@
-v0.1.0 Initial release
-======================
+# CHANGELOG
 
-Added the demo flower project.
+## v0.1.0 Initial release by [kivy-garden](https://github.com/kivy-garden/graph)
+
+- Added the demo flower project.
+
+## Additions by [HoerTech-gGmbH](https://github.com/HoerTech-gGmbH/kivy-garden-graph)
+
+### New Features
+
+- **Custom Tick Labels**: Added support for custom tick label strings with error handling for mismatched list sizes
+- **Custom Tick Positions**: Implemented ability to set custom tick positions
+- **Legend Support**: Added comprehensive legend functionality with dedicated `GraphLegend` class
+- **LineAndMarkerPlot Class**: Created new `LineAndMarkerPlot` class with `legend_display` property
+- **Axis Reversal**: Automatic axis reversal in linear mode when xmin > xmax or ymin > ymax
+
+### Improvements
+
+- **Color System**: Migrated to `ColorProperty` for plot colors
+- **Label Formatting**: Enhanced label options for ticks and legends
+- **Y-Label Alignment**: Right-aligned y-axis labels for better readability
+- **Marker Size Validation**: Added minimum value constraint for marker sizes
+
+### Bug Fixes
+
+- Fixed error when setting xlabel or ylabel before other properties
+- Improved legend cleanup when resetting legends
+- Enhanced error handling for mismatched list sizes in custom tick labels
+
+### Technical Changes
+
+- Removed font_size parameter from certain components
+- Updated project URL in setup.py
+- Improved legend recreation and cleanup mechanisms
+
+## Additions of this fork (v0.4.2.dev0)
+
+### New Features
+
+- **OptimizedSmoothLinePlot**: an optimized SmoothLinePlot implementation for real-time plotting, featuring:
+  - Configurable anti-aliasing
+  - Automatic buffer management
+  - Memory leak prevention
+  - Performance optimizations
+- **pyproject.toml**: Add an initial `pyproject.toml` to future-proof the package installation.
+
+### Cleanup
+
+- Basic clean up reducing code duplications and recursions
