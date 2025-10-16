@@ -104,6 +104,7 @@ from kivy.properties import (
     ColorProperty,
     OptionProperty,
 )
+from kivy.utils import platform
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
@@ -1467,18 +1468,20 @@ class Graph(Widget):
 
 class GraphFXAA(Graph):
     """
-    Graph with a lightweight FXAA-like post-process applied to the FBO texture.
-    Fixes flicker by:
-      - Preserving alpha in shader
-      - Updating post rect after every redraw
-      - Setting FBO clear_color to background_color
+    Graph with a lightweight post-process applied to the FBO texture.
+
+    - Desktop: edge-aware smoothing shader.
+    - Android: GLES2-safe 4-neighbor blend (no derivatives, no extensions).
+    - Preserves alpha and updates uniforms each redraw.
+    - Sets FBO clear_color to background_color to avoid flicker.
     """
 
-    FXAA_FS = """
+    # Desktop-friendly edge-aware shader (no derivatives used here to keep it portable)
+    FXAA_FS_DESKTOP = """
     $HEADER$
-    uniform vec2 inv_tex_size;   // 1.0 / texture size
-    uniform float fxaa_threshold; // edge sensitivity
-    uniform float fxaa_strength;  // smoothing strength
+    uniform vec2 inv_tex_size;
+    uniform float fxaa_threshold;
+    uniform float fxaa_strength;
 
     vec4 fetch4(vec2 uv){ return texture2D(texture0, uv); }
     vec3 fetch(vec2 uv){ return fetch4(uv).rgb; }
@@ -1518,24 +1521,50 @@ class GraphFXAA(Graph):
     }
     """
 
+    # Android-safe shader: simple 4-neighbor blend, no extensions/derivatives
+    FXAA_FS_ANDROID = """
+    $HEADER$
+    uniform vec2 inv_tex_size;
+    uniform float fxaa_strength;
+
+    void main(void){
+        vec2 uv = tex_coord0;
+        vec2 px = inv_tex_size;
+
+        vec4 cM = texture2D(texture0, uv);
+        vec4 cN = texture2D(texture0, uv + vec2( 0.0, -px.y));
+        vec4 cS = texture2D(texture0, uv + vec2( 0.0,  px.y));
+        vec4 cE = texture2D(texture0, uv + vec2(  px.x, 0.0));
+        vec4 cW = texture2D(texture0, uv + vec2( -px.x, 0.0));
+
+        vec4 blur = (cN + cS + cE + cW) * 0.25;
+        vec4 outc = mix(cM, blur, fxaa_strength);
+
+        gl_FragColor = outc * frag_color;
+    }
+    """
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # Ensure the FBO clears to the graph's background color (avoid black flashes)
+        # Avoid black flashes by clearing FBO to background_color
         try:
             self._fbo.clear_color = tuple(self.background_color)
         except Exception:
             pass
         self.bind(background_color=self._update_clear_color)
 
-        # Remove the original FBO rectangle and replace with post-process RC
+        # Remove original FBO rectangle
         try:
             self.canvas.remove(self._fbo_rect)
         except Exception:
             pass
 
+        # Choose shader per platform
+        fs_src = self.FXAA_FS_ANDROID if platform == "android" else self.FXAA_FS_DESKTOP
+
         self._post_rc = RenderContext(
-            fs=self.FXAA_FS, use_parent_modelview=True, use_parent_projection=True
+            fs=fs_src, use_parent_modelview=True, use_parent_projection=True
         )
         with self._post_rc:
             Color(1, 1, 1, 1)
@@ -1543,8 +1572,10 @@ class GraphFXAA(Graph):
                 size=self.size, pos=self.pos, texture=self._fbo.texture
             )
 
-        self._post_rc["fxaa_threshold"] = 0.0312
-        self._post_rc["fxaa_strength"] = 0.15
+        # Defaults
+        self._post_rc["fxaa_strength"] = 0.25
+        if platform != "android":
+            self._post_rc["fxaa_threshold"] = 0.0312
 
         self.canvas.add(self._post_rc)
 
@@ -1557,7 +1588,7 @@ class GraphFXAA(Graph):
         except Exception:
             pass
 
-    # Keep post-process synced after any redraw
+    # Update post rect every redraw
     def _redraw_all(self, *args):
         super()._redraw_all(*args)
         self._update_post_rect()
@@ -1580,7 +1611,7 @@ class GraphFXAA(Graph):
             Logger.warning(f"GraphFXAA: post rect update failed: {e}")
 
     def set_fxaa(self, threshold: float = None, strength: float = None):
-        if threshold is not None:
+        if threshold is not None and platform != "android":
             self._post_rc["fxaa_threshold"] = float(threshold)
         if strength is not None:
             self._post_rc["fxaa_strength"] = float(strength)
@@ -2063,11 +2094,11 @@ class SmoothLinePlot(Plot):
 
 class OptimizedSmoothLinePlot(Plot):
     """
-    Real-time line plot without FBO flicker:
-    - Does not clear FBO on every draw; only clears when axis/params change.
-    - Guards against invalid view size to avoid bottom-left shifts.
-    - Optional derivatives-based AA (adaptive width).
-    - Optional decimation (disable if you suspect shifting).
+    Real-time line plot:
+    - Android: GLES2-safe AA shader (no derivatives).
+    - Desktop: adaptive AA shader.
+    - Flicker-free (clears only when params change).
+    - Optional decimation (default off to avoid shifts).
     """
 
     # Performance toggles
@@ -2085,22 +2116,26 @@ class OptimizedSmoothLinePlot(Plot):
     _texture_cache: Optional[Texture] = None
     _texture_refs: int = 0
 
-    # Derivatives-based AA FS (better quality if derivatives available)
-    DERIV_FS = """
+    # Desktop AA FS (no derivatives to keep it broadly compatible)
+    AA_FS_DESKTOP = """
     $HEADER$
-    #ifdef GL_OES_standard_derivatives
-    #extension GL_OES_standard_derivatives : enable
-    #endif
-    uniform float edge_scale;  // scales AA width in screen pixels
+    uniform float edge_scale;
     void main(void) {
         float t = texture2D(texture0, tex_coord0).r;
-        #if defined(GL_OES_standard_derivatives)
-            float w = fwidth(t) * edge_scale;
-            float a = smoothstep(0.5 - w, 0.5 + w, t);
-        #else
-            float edgewidth = edge_scale * 0.015625 * 64.0;
-            float a = smoothstep(0.0, edgewidth, t);
-        #endif
+        float edgewidth = edge_scale * 0.015625 * 64.0;
+        float a = smoothstep(0.0, edgewidth, t);
+        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
+    }
+    """
+
+    # Android-safe AA FS (GLES2-friendly)
+    AA_FS_ANDROID = """
+    $HEADER$
+    uniform float edge_scale;
+    void main(void) {
+        float t = texture2D(texture0, tex_coord0).r;
+        float edgewidth = edge_scale * 0.015625 * 64.0;
+        float a = smoothstep(0.0, edgewidth, t);
         gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
@@ -2168,11 +2203,9 @@ class OptimizedSmoothLinePlot(Plot):
         if self.auto_cleanup:
             Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
 
-    # ----- Drawing setup -----
-
     def create_drawings(self) -> List:
         try:
-            fs_src = self.DERIV_FS
+            fs_src = self.AA_FS_ANDROID if platform == "android" else self.AA_FS_DESKTOP
             self._grc = RenderContext(
                 fs=fs_src, use_parent_modelview=True, use_parent_projection=True
             )
@@ -2208,50 +2241,13 @@ class OptimizedSmoothLinePlot(Plot):
         except Exception as e:
             Logger.warning(f"OptimizedSmoothLinePlot: recreate_drawings failed: {e}")
 
-    # ----- Public API -----
-
     def feed_point(self, x: float, y: float):
         self._ring.append((x, y))
         self.ask_draw()
 
-    def optimize_for_realtime(self, target_fps=60):
-        if target_fps >= 60:
-            self.decimate = False
-            self.max_points = min(800, self.max_points)
-            self.cleanup_interval = 15.0
-            self.enable_antialiasing = False
-        elif target_fps >= 30:
-            self.decimate = True
-            self.max_points = min(1500, self.max_points)
-            self.cleanup_interval = 30.0
-            self.enable_antialiasing = True
-        else:
-            self.decimate = True
-            self.max_points = min(2500, self.max_points)
-            self.cleanup_interval = 45.0
-            self.enable_antialiasing = True
-        Logger.info(f"OptimizedSmoothLinePlot: Optimized for {target_fps} FPS")
-
-    def get_stats(self) -> Dict:
-        return {
-            "draw_count": self._draw_count,
-            "ring_points": len(self._ring),
-            "actual_points": len(self.points),
-            "last_cleanup": self._last_cleanup_time,
-            "antialiasing": self.enable_antialiasing,
-            "texture_available": self._texture is not None,
-            "line_width": self.line_width,
-            "max_points": self.max_points,
-            "shared_texture_refs": self._texture_refs,
-        }
-
-    # ----- Plot overrides -----
-
     def update(self, xlog, xmin, xmax, ylog, ymin, ymax, size):
-        # Mark that a clear is needed only when params change (e.g., zoom/pan),
-        # not every frame. This avoids flicker.
         super().update(xlog, xmin, xmax, ylog, ymin, ymax, size)
-        self._needs_clear = True
+        self._needs_clear = True  # clear only on param change
 
     def iterate_points(self):
         if self._ring:
@@ -2267,7 +2263,6 @@ class OptimizedSmoothLinePlot(Plot):
             return
         self._is_drawing = True
         try:
-            # Do NOT call super().draw() here (it clears the FBO every frame).
             # Clear only when params changed to prevent flicker.
             if self._needs_clear:
                 self.dispatch("on_clear_plot")
@@ -2275,8 +2270,6 @@ class OptimizedSmoothLinePlot(Plot):
             self._draw_optimized()
         finally:
             self._is_drawing = False
-
-    # ----- Internal drawing -----
 
     def _view_valid(self) -> bool:
         x0, y0, x1, y1 = self.params.get("size", (0, 0, 0, 0))
@@ -2294,12 +2287,9 @@ class OptimizedSmoothLinePlot(Plot):
         if ring_len == self._last_ring_len and ring_tail == self._last_ring_tail:
             return
 
-        if self.decimate:
-            pts = self._decimate_to_pixels()
-        else:
-            pts = list(self.iterate_points())
-            if len(pts) > self.max_points:
-                pts = pts[-int(self.max_points) :]
+        pts = list(self.iterate_points())
+        if len(pts) > self.max_points:
+            pts = pts[-int(self.max_points) :]
 
         n = min(len(pts), int(self.max_points))
         if n < 2:
@@ -2321,70 +2311,13 @@ class OptimizedSmoothLinePlot(Plot):
             self._cleanup_old_data()
             self._last_cleanup_time = now
 
-    def _decimate_to_pixels(self) -> List[Tuple[float, float]]:
-        x0, y0, x1, y1 = self.params.get("size", (0, 0, 0, 0))
-        w = int(max(1, x1 - x0))
-        if w <= 1:
-            return list(self.iterate_points())
-
-        x_px = self.x_px()
-        y_px = self.y_px()
-        source = list(self._ring) if self._ring else list(self.points)
-
-        # Per-column [ymin, ymax, x_sum, count]
-        col_stats: Dict[int, List[float]] = {}
-        for xd, yd in source:
-            px = x_px(xd)
-            py = y_px(yd)
-            if px < x0 or px >= x1:
-                continue
-            col = int(px - x0)
-            stats = col_stats.get(col)
-            if stats is None:
-                col_stats[col] = [py, py, px, 1.0]
-            else:
-                if py < stats[0]:
-                    stats[0] = py
-                if py > stats[1]:
-                    stats[1] = py
-                stats[2] += px
-                stats[3] += 1.0
-
-        if not col_stats:
-            return []
-
-        out: List[Tuple[float, float]] = []
-        for col in range(w):
-            stats = col_stats.get(col)
-            if stats is None:
-                continue
-            ymin_px, ymax_px, x_sum, count = stats
-            x_out = x_sum / max(1.0, count)
-            if self.preserve_extrema and ymin_px != ymax_px:
-                out.append((x_out, ymin_px))
-                out.append((x_out, ymax_px))
-            else:
-                out.append((x_out, ymin_px))
-            if len(out) >= int(self.max_points):
-                break
-
-        return out
-
-    def _params_signature(self) -> Tuple:
-        p = self.params
-        s = p.get("size", (0, 0, 0, 0))
-        return (p.get("xmin"), p.get("xmax"), p.get("ymin"), p.get("ymax"), s)
-
-    def _reset_flat_buffer(self):
-        self._flat_points = [0.0] * (2 * int(self.max_points))
-
     def _should_cleanup(self, current_time: float) -> bool:
         return self.auto_cleanup and (
             current_time - self._last_cleanup_time > float(self.cleanup_interval)
         )
 
     def _cleanup_old_data(self):
-        self._reset_flat_buffer()
+        self._flat_points = [0.0] * (2 * int(self.max_points))
         if self._ring.maxlen != int(self.max_points):
             self._ring = deque(self._ring, maxlen=int(self.max_points))
         Logger.debug("OptimizedSmoothLinePlot: Cleanup completed")
@@ -2398,16 +2331,11 @@ class OptimizedSmoothLinePlot(Plot):
         except Exception as e:
             Logger.warning(f"OptimizedSmoothLinePlot: Periodic cleanup failed: {e}")
 
-    # ----- Property handlers -----
-
     def on_line_width(self, _, value):
         if self._gline:
             self._gline.width = value
         if self._grc and self.enable_antialiasing:
-            try:
-                self._grc["edge_scale"] = self._compute_edge_scale()
-            except Exception:
-                pass
+            self._grc["edge_scale"] = self._compute_edge_scale()
 
     def on_enable_antialiasing(self, _, __):
         self.recreate_drawings()
@@ -2432,13 +2360,9 @@ class OptimizedSmoothLinePlot(Plot):
         if self._gcolor:
             self._gcolor.rgba = value
 
-    # ----- AA helpers -----
-
     def _compute_edge_scale(self) -> float:
         lw = float(self.line_width)
         return max(0.5, min(3.0, 0.6 * lw))
-
-    # ----- Legend -----
 
     def create_legend_drawings(self) -> List:
         try:
@@ -2459,10 +2383,8 @@ class OptimizedSmoothLinePlot(Plot):
         except Exception as e:
             Logger.warning(f"OptimizedSmoothLinePlot: Legend drawing failed: {e}")
 
-    # ----- Cleanup -----
-
     def force_refresh(self):
-        self._reset_flat_buffer()
+        self._flat_points = [0.0] * (2 * int(self.max_points))
         self.ask_draw()
 
     def __del__(self):
