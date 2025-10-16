@@ -114,7 +114,7 @@ try:
 except ImportError:
     np = None
 
-from _version import __version__
+from ._version import __version__
 
 
 def identity(x):
