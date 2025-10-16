@@ -1466,26 +1466,29 @@ class Graph(Widget):
     """
 
 
-class GraphFXAA(Graph):
+class GraphAA(Graph):
     """
-    Graph with a lightweight post-process applied to the FBO texture.
+    Graph with AA:
+    - fxaa (default): line-oriented FXAA-lite (edge-only, extra_blur control).
+    - ssaa: true 2x supersampling (render into 2x FBO, downsample in linear color).
 
-    - Desktop: edge-aware smoothing shader.
-    - Android: GLES2-safe 4-neighbor blend (no derivatives, no extensions).
-    - Preserves alpha and updates uniforms each redraw.
-    - Sets FBO clear_color to background_color to avoid flicker.
+    Properties persist and can be changed at runtime.
     """
 
-    # Desktop-friendly edge-aware shader (no derivatives used here to keep it portable)
-    FXAA_FS_DESKTOP = """
+    # Line-oriented FXAA (edge-only) — GLES2-safe, desktop+Android
+    FXAA_FS = """
     $HEADER$
-    uniform vec2 inv_tex_size;
-    uniform float fxaa_threshold;
-    uniform float fxaa_strength;
+
+    uniform vec2  inv_tex_size;   // 1.0 / texture size
+    uniform float fxaa_threshold;  // 0.05..0.10
+    uniform float fxaa_strength;   // 0..1
+    uniform float extra_blur;      // 0..1
 
     vec4 fetch4(vec2 uv){ return texture2D(texture0, uv); }
     vec3 fetch(vec2 uv){ return fetch4(uv).rgb; }
     float luma(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }
+    vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
+    vec3 toSRGB(vec3 c){ return pow(c, vec3(1.0/2.2)); }
 
     void main(void){
         vec2 uv = tex_coord0;
@@ -1495,59 +1498,105 @@ class GraphFXAA(Graph):
         vec3 cM = sM4.rgb;
         float aM = sM4.a;
 
-        float lM = luma(cM);
+        // Edge detection (4-neighbor gradient)
         float lN = luma(fetch(uv + vec2( 0.0, -px.y)));
         float lS = luma(fetch(uv + vec2( 0.0,  px.y)));
-        float lE = luma(fetch(uv + vec2( px.x,  0.0)));
-        float lW = luma(fetch(uv + vec2(-px.x,  0.0)));
+        float lE = luma(fetch(uv + vec2(  px.x, 0.0)));
+        float lW = luma(fetch(uv + vec2( -px.x, 0.0)));
+        vec2 g = vec2(lE - lW, lS - lN);
+        float mag = max(abs(g.x), abs(g.y));
 
-        float lMax = max(max(lN, lS), max(lE, lW));
-        float lMin = min(min(lN, lS), min(lE, lW));
-        float contrast = lMax - lMin;
-
-        if (contrast < fxaa_threshold){
-            gl_FragColor = vec4(cM, aM) * frag_color;
+        if (mag < fxaa_threshold){
+            gl_FragColor = sM4 * frag_color;
             return;
         }
 
-        vec3 cH = (fetch(uv + vec2(px.x, 0.0)) + fetch(uv + vec2(-px.x, 0.0))) * 0.5;
-        vec3 cV = (fetch(uv + vec2(0.0, px.y)) + fetch(uv + vec2(0.0, -px.y))) * 0.5;
-        vec3 blur = (cH + cV) * 0.5;
+        // Edge normal (blend across)
+        vec2 n = normalize(g + 1e-6);
+        vec2 stepUV = vec2(px.x * n.x, px.y * n.y);
 
-        float w = clamp(contrast * (fxaa_strength * 8.0), 0.0, 1.0);
-        vec3 outc = mix(cM, blur, w);
+        // Tent across edge: ±0.5 and ±1.5 px
+        vec3 s1 = fetch(uv + stepUV * 0.5);
+        vec3 s2 = fetch(uv - stepUV * 0.5);
+        vec3 s3 = fetch(uv + stepUV * 1.5);
+        vec3 s4 = fetch(uv - stepUV * 1.5);
 
+        vec3 linTent = toLinear(cM) * 0.4
+                     + (toLinear(s1) + toLinear(s2)) * 0.15
+                     + (toLinear(s3) + toLinear(s4)) * 0.15;
+        vec3 tent = toSRGB(linTent);
+
+        // Tiny isotropic component (edge-only)
+        vec3 i1 = fetch(uv + vec2(px.x * 0.5, 0.0));
+        vec3 i2 = fetch(uv - vec2(px.x * 0.5, 0.0));
+        vec3 i3 = fetch(uv + vec2(0.0, px.y * 0.5));
+        vec3 i4 = fetch(uv - vec2(0.0, px.y * 0.5));
+        vec3 iso = (i1 + i2 + i3 + i4) * 0.25;
+
+        // Neighborhood clip
+        vec3 minc = min(min(cM, s1), min(s2, min(s3, s4)));
+        vec3 maxc = max(max(cM, s1), max(s2, max(s3, s4)));
+        vec3 tentClipped = clamp(tent, minc, maxc);
+        vec3 isoClipped  = clamp(iso,  minc, maxc);
+
+        // Mix tent with isotropic component; then edge-weighted blend
+        float eb = clamp(extra_blur, 0.0, 1.0);
+        vec3 edgeBlur = mix(tentClipped, isoClipped, eb);
+        float w = fxaa_strength * smoothstep(fxaa_threshold, fxaa_threshold * 4.0, mag);
+
+        vec3 outc = mix(cM, edgeBlur, w);
         gl_FragColor = vec4(outc, aM) * frag_color;
     }
     """
 
-    # Android-safe shader: simple 4-neighbor blend, no extensions/derivatives
-    FXAA_FS_ANDROID = """
+    # 2x SSAA downsample (box filter in linear color) — GLES2-safe
+    SSAA2_FS = """
     $HEADER$
-    uniform vec2 inv_tex_size;
-    uniform float fxaa_strength;
+    uniform vec2  inv_tex_size; // of the HIGH-RES (2x) texture
+    uniform float ssaa_scale;   // 2.0 when SSAA is enabled
+
+    vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
+    vec3 toSRGB(vec3 c){ return pow(c, vec3(1.0/2.2)); }
 
     void main(void){
         vec2 uv = tex_coord0;
-        vec2 px = inv_tex_size;
+        float step = 0.5 / max(ssaa_scale, 1.0);    // sample half a low-res pixel in hi-res space
+        vec2 off = inv_tex_size * step;
 
-        vec4 cM = texture2D(texture0, uv);
-        vec4 cN = texture2D(texture0, uv + vec2( 0.0, -px.y));
-        vec4 cS = texture2D(texture0, uv + vec2( 0.0,  px.y));
-        vec4 cE = texture2D(texture0, uv + vec2(  px.x, 0.0));
-        vec4 cW = texture2D(texture0, uv + vec2( -px.x, 0.0));
+        vec4 s00 = texture2D(texture0, uv + vec2(-off.x, -off.y));
+        vec4 s10 = texture2D(texture0, uv + vec2( off.x, -off.y));
+        vec4 s01 = texture2D(texture0, uv + vec2(-off.x,  off.y));
+        vec4 s11 = texture2D(texture0, uv + vec2( off.x,  off.y));
 
-        vec4 blur = (cN + cS + cE + cW) * 0.25;
-        vec4 outc = mix(cM, blur, fxaa_strength);
+        vec3 lin = 0.25 * (toLinear(s00.rgb) + toLinear(s10.rgb) + toLinear(s01.rgb) + toLinear(s11.rgb));
+        float a  = 0.25 * (s00.a + s10.a + s01.a + s11.a);
 
-        gl_FragColor = outc * frag_color;
+        gl_FragColor = vec4(toSRGB(lin), a) * frag_color;
     }
     """
 
+    # Mode: 'fxaa' (default) or 'ssaa'
+    aa_mode = OptionProperty("fxaa", options=("fxaa", "ssaa"))
+    # SSAA scale (only 1 or 2 are meaningful here; 2 = 2x FBO)
+    ssaa_scale = NumericProperty(2)
+
+    # FXAA params
+    fxaa_strength = NumericProperty(0.6)
+    fxaa_threshold = NumericProperty(0.07)
+    extra_blur = NumericProperty(0.3)
+
     def __init__(self, **kwargs):
+        # Allow overriding via kwargs
+        self.aa_mode = kwargs.pop("aa_mode", self.aa_mode)
+        self.ssaa_scale = float(kwargs.pop("ssaa_scale", self.ssaa_scale))
+        self._ssaa_resizing = False
+        self.fxaa_strength = float(kwargs.pop("fxaa_strength", self.fxaa_strength))
+        self.fxaa_threshold = float(kwargs.pop("fxaa_threshold", self.fxaa_threshold))
+        self.extra_blur = float(kwargs.pop("extra_blur", self.extra_blur))
+
         super().__init__(**kwargs)
 
-        # Avoid black flashes by clearing FBO to background_color
+        # Clear FBO with background
         try:
             self._fbo.clear_color = tuple(self.background_color)
         except Exception:
@@ -1560,9 +1609,32 @@ class GraphFXAA(Graph):
         except Exception:
             pass
 
-        # Choose shader per platform
-        fs_src = self.FXAA_FS_ANDROID if platform == "android" else self.FXAA_FS_DESKTOP
+        # Build post-pass
+        self._build_post_context()
 
+        # Bind uniforms to properties (persist + live updates)
+        self.bind(
+            fxaa_strength=lambda _, v: self._set_uniform("fxaa_strength", float(v))
+        )
+        self.bind(
+            fxaa_threshold=lambda _, v: self._set_uniform("fxaa_threshold", float(v))
+        )
+        self.bind(extra_blur=lambda _, v: self._set_uniform("extra_blur", float(v)))
+        self.bind(aa_mode=self._on_aa_changed)
+        self.bind(ssaa_scale=lambda _, v: self._on_aa_changed(None, self.aa_mode))
+
+        self.canvas.add(self._post_rc)
+
+        self.bind(size=self._on_resize_or_move, pos=self._on_resize_or_move)
+        Clock.schedule_once(self._post_init, 0)
+
+    def _post_init(self, *args):
+        # Ensure FBO and uniforms are correct after construction
+        self._apply_ssaa_target()
+        self._update_post_rect()
+
+    def _build_post_context(self):
+        fs_src = self.SSAA2_FS if self.aa_mode == "ssaa" else self.FXAA_FS
         self._post_rc = RenderContext(
             fs=fs_src, use_parent_modelview=True, use_parent_projection=True
         )
@@ -1572,15 +1644,61 @@ class GraphFXAA(Graph):
                 size=self.size, pos=self.pos, texture=self._fbo.texture
             )
 
-        # Defaults
-        self._post_rc["fxaa_strength"] = 0.25
-        if platform != "android":
-            self._post_rc["fxaa_threshold"] = 0.0312
+        # Push initial uniforms for both modes (harmless if unused)
+        self._set_uniform("fxaa_strength", float(self.fxaa_strength))
+        self._set_uniform("fxaa_threshold", float(self.fxaa_threshold))
+        self._set_uniform("extra_blur", float(self.extra_blur))
+        self._set_uniform("ssaa_scale", float(self.ssaa_scale))
 
+    def _on_aa_changed(self, *_):
+        # Rebuild post context on mode/scale change
+        try:
+            if self._post_rc in self.canvas.children:
+                self.canvas.remove(self._post_rc)
+        except Exception:
+            pass
+        self._build_post_context()
         self.canvas.add(self._post_rc)
+        self._apply_ssaa_target()
+        self._update_post_rect()
 
-        self.bind(size=self._update_post_rect, pos=self._update_post_rect)
-        Clock.schedule_once(self._update_post_rect, 0)
+    def _apply_ssaa_target(self):
+        """Resize the internal FBO when ssaa is active; else adjust filters.
+        Guarded to avoid recursion on resize/redraw signals."""
+        if self._ssaa_resizing:
+            return
+        try:
+            if self.aa_mode == "ssaa":
+                scale = max(1, int(self.ssaa_scale))
+                new_w = max(1, int(self.width * scale))
+                new_h = max(1, int(self.height * scale))
+                if tuple(self._fbo.size) != (new_w, new_h):
+                    self._ssaa_resizing = True
+                    self._fbo.size = (new_w, new_h)
+                    if self._fbo.texture:
+                        # avoid hardware minify mixing with our box filter
+                        self._fbo.texture.min_filter = "nearest"
+                        self._fbo.texture.mag_filter = "nearest"
+                    # defer finish to break synchronous recursion
+                    Clock.schedule_once(self._finish_ssaa_resize, 0)
+            else:
+                # FXAA path: default filtering
+                if self._fbo.texture:
+                    self._fbo.texture.min_filter = "linear"
+                    self._fbo.texture.mag_filter = "linear"
+        except Exception as e:
+            Logger.warning(f"GraphFXAA: SSAA FBO apply failed: {e}")
+            self._ssaa_resizing = False
+
+    def _finish_ssaa_resize(self, *args):
+        self._ssaa_resizing = False
+        # update uniforms/rect with new hi-res texture size
+        self._update_post_rect()
+        # optional: request a redraw without touching size to avoid loops
+        try:
+            super()._redraw_all()
+        except Exception:
+            pass
 
     def _update_clear_color(self, *args):
         try:
@@ -1597,6 +1715,11 @@ class GraphFXAA(Graph):
         super()._redraw_size(*args)
         self._update_post_rect()
 
+    def _on_resize_or_move(self, *args):
+        # Called on widget size/pos changes
+        self._apply_ssaa_target()
+        self._update_post_rect()
+
     def _update_post_rect(self, *args):
         try:
             tex = self._fbo.texture
@@ -1607,14 +1730,27 @@ class GraphFXAA(Graph):
             iw = 1.0 / float(tw if tw else 1.0)
             ih = 1.0 / float(th if th else 1.0)
             self._post_rc["inv_tex_size"] = (iw, ih)
+            # Keep ssaa_scale uniform up to date (used only in SSAA FS)
+            self._post_rc["ssaa_scale"] = float(self.ssaa_scale)
         except Exception as e:
             Logger.warning(f"GraphFXAA: post rect update failed: {e}")
 
-    def set_fxaa(self, threshold: float = None, strength: float = None):
-        if threshold is not None and platform != "android":
-            self._post_rc["fxaa_threshold"] = float(threshold)
+    def _set_uniform(self, name, value):
+        try:
+            self._post_rc[name] = value
+        except Exception as e:
+            Logger.warning(f"GraphFXAA: failed to set uniform {name}: {e}")
+
+    # Backward-compatible API
+    def set_fxaa(
+        self, threshold: float = None, strength: float = None, extra_blur: float = None
+    ):
+        if threshold is not None:
+            self.fxaa_threshold = float(threshold)
         if strength is not None:
-            self._post_rc["fxaa_strength"] = float(strength)
+            self.fxaa_strength = float(strength)
+        if extra_blur is not None:
+            self.extra_blur = float(extra_blur)
 
 
 class Plot(EventDispatcher):
@@ -2105,38 +2241,40 @@ class OptimizedSmoothLinePlot(Plot):
     max_points = NumericProperty(2000)
     cleanup_interval = NumericProperty(30.0)
     auto_cleanup = BooleanProperty(True)
-    decimate = BooleanProperty(False)  # default off to avoid any shift surprises
+    decimate = BooleanProperty(True)  # default off to avoid any shift surprises
     preserve_extrema = BooleanProperty(True)
 
     # Visuals
-    line_width = NumericProperty(2.0)
+    line_width = NumericProperty(10.0)
     enable_antialiasing = BooleanProperty(True)
 
     # Shared AA texture cache
     _texture_cache: Optional[Texture] = None
     _texture_refs: int = 0
 
-    # Desktop AA FS (no derivatives to keep it broadly compatible)
-    AA_FS_DESKTOP = """
+    # AA Shader
+    AA_FS_DERIVATIVES = """
+    // GLSL - coverage AA with derivatives (fallback to your current if extension missing)
     $HEADER$
-    uniform float edge_scale;
-    void main(void) {
-        float t = texture2D(texture0, tex_coord0).r;
-        float edgewidth = edge_scale * 0.015625 * 64.0;
-        float a = smoothstep(0.0, edgewidth, t);
-        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
-    }
-    """
+    #ifdef GL_ES
+    precision mediump float;
+    #extension GL_OES_standard_derivatives : enable
+    #endif
+    uniform float edge_scale;     // tune softness 0.5..3.0
 
-    # Android-safe AA FS (GLES2-friendly)
-    AA_FS_ANDROID = """
-    $HEADER$
-    uniform float edge_scale;
     void main(void) {
-        float t = texture2D(texture0, tex_coord0).r;
-        float edgewidth = edge_scale * 0.015625 * 64.0;
-        float a = smoothstep(0.0, edgewidth, t);
-        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
+            float t = texture2D(texture0, tex_coord0).r;  // ramp sample
+        #ifdef GL_OES_standard_derivatives
+            // Use local frequency to adapt smoothstep width
+            float w = fwidth(t) * edge_scale;
+            // Center ramp around 0.5: more symmetric AA
+            float a = smoothstep(0.5 - w, 0.5 + w, t);
+        #else
+            // Fallback: your existing scale
+            float edgewidth = edge_scale;
+            float a = smoothstep(0.0, edgewidth, t);
+        #endif
+            gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
 
@@ -2148,14 +2286,19 @@ class OptimizedSmoothLinePlot(Plot):
                 tex = Texture.create(size=(1, size), colorfmt="rgb")
                 import array
 
+                # symmetric ramp 0..255..0 (full peak at 255)
                 half = size // 2
-                up = [int(255.0 * i / max(1, half)) for i in range(half)]
-                ramp = up + list(reversed(up))
+                up = [int(round(255.0 * i / half)) for i in range(half + 1)]  # 0..255
+                ramp = up + up[-2::-1]  # mirror without duplicating peak
                 rgb = []
-                for v in ramp:
+                for v in ramp[:size]:  # ensure exact length
                     rgb.extend((v, v, v))
                 buf = array.array("B", rgb).tobytes()
                 tex.blit_buffer(buf, colorfmt="rgb")
+                tex.wrap = "clamp_to_edge"
+                tex.min_filter = "linear"
+                tex.mag_filter = "linear"
+
                 cls._texture_cache = tex
                 Logger.debug(
                     "OptimizedSmoothLinePlot: Created shared AA ramp texture (1x128)"
@@ -2205,7 +2348,7 @@ class OptimizedSmoothLinePlot(Plot):
 
     def create_drawings(self) -> List:
         try:
-            fs_src = self.AA_FS_ANDROID if platform == "android" else self.AA_FS_DESKTOP
+            fs_src = self.AA_FS_DERIVATIVES
             self._grc = RenderContext(
                 fs=fs_src, use_parent_modelview=True, use_parent_projection=True
             )
@@ -2395,6 +2538,122 @@ class OptimizedSmoothLinePlot(Plot):
                 self._grc.clear()
         except Exception:
             pass
+
+
+class OptimizedMeshStripPlot(Plot):
+    """
+    Configurable linethickness plot using Mesh(mode='triangles').
+    Very fast Android-friendly line.
+    - Builds a quad per segment by extruding along the segment normal.
+    - Very fast on Android (no fragment texture sampling).
+    - line_width controls thickness in pixels (butt caps, bevel-ish joins).
+
+    Notes:
+    - This simple extrude per segment may show small overlaps/gaps at sharp corners.
+      For most telemetry/time-series, it is acceptable and much faster than shader AA.
+    """
+
+    line_width = NumericProperty(2.0)
+    max_points = NumericProperty(1500)
+    auto_cleanup = BooleanProperty(True)
+    cleanup_interval = NumericProperty(30.0)
+
+    def __init__(self, **kwargs):
+        self._rc: Optional[RenderContext] = None
+        self._color: Optional[Color] = None
+        self._mesh: Optional[Mesh] = None
+        self._last_cleanup_time: float = 0.0
+        super().__init__(**kwargs)
+        self._drawings = self.create_drawings()
+        if self.auto_cleanup:
+            Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
+
+    def create_drawings(self):
+        try:
+            self._rc = RenderContext(
+                use_parent_modelview=True, use_parent_projection=True
+            )
+            with self._rc:
+                self._color = Color(*self.color)
+                self._mesh = Mesh(mode="triangles", vertices=[], indices=[])
+            self.bind(
+                color=lambda _, v: (
+                    setattr(self._color, "rgba", v) if self._color else None
+                )
+            )
+            self.bind(line_width=lambda *_: None)  # width applied during draw
+            return [self._rc]
+        except Exception as e:
+            Logger.error(f"OptimizedThickMeshPlot: create_drawings failed: {e}")
+            return []
+
+    def draw(self, *args):
+        super().draw(*args)
+        if not self._mesh:
+            return
+
+        # Collect pixel-space points
+        pts = list(self.iterate_points())
+        if len(pts) > int(self.max_points):
+            pts = pts[-int(self.max_points) :]
+        if len(pts) < 2:
+            self._mesh.vertices = []
+            self._mesh.indices = []
+            return
+
+        half_w = float(self.line_width) * 0.5
+
+        # Build quads per non-degenerate segment
+        quad_vertices: List[float] = []  # x,y,u,v per vertex
+        quad_indices: List[int] = []
+        vert_idx = 0
+
+        def add_segment(p0: Tuple[float, float], p1: Tuple[float, float]):
+            nonlocal vert_idx
+            x0, y0 = p0
+            x1, y1 = p1
+            dx = x1 - x0
+            dy = y1 - y0
+            L = (dx * dx + dy * dy) ** 0.5
+            if L <= 1e-6:
+                return  # skip degenerate
+            nx = -dy / L
+            ny = dx / L
+            # four vertices (quad): p0 +/- n*half_w, p1 +/- n*half_w
+            v0 = (x0 + nx * half_w, y0 + ny * half_w, 0.0, 0.0)
+            v1 = (x0 - nx * half_w, y0 - ny * half_w, 0.0, 0.0)
+            v2 = (x1 + nx * half_w, y1 + ny * half_w, 0.0, 0.0)
+            v3 = (x1 - nx * half_w, y1 - ny * half_w, 0.0, 0.0)
+            quad_vertices.extend(v0 + v1 + v2 + v3)
+            # two triangles: (v0,v1,v2) and (v1,v3,v2)
+            quad_indices.extend(
+                [
+                    vert_idx + 0,
+                    vert_idx + 1,
+                    vert_idx + 2,
+                    vert_idx + 1,
+                    vert_idx + 3,
+                    vert_idx + 2,
+                ]
+            )
+            vert_idx += 4
+
+        for i in range(len(pts) - 1):
+            add_segment(pts[i], pts[i + 1])
+
+        # Assign to mesh (reuse buffers when possible)
+        self._mesh.vertices = quad_vertices
+        self._mesh.indices = quad_indices
+
+    def _periodic_cleanup(self, dt):
+        now = Clock.get_time()
+        if now - self._last_cleanup_time > float(self.cleanup_interval):
+            # shrink vertex buffer occasionally if it grew too big
+            if self._mesh and len(self._mesh.vertices) > 4 * 4 * int(self.max_points):
+                self._mesh.vertices = self._mesh.vertices[
+                    : 4 * 4 * int(self.max_points)
+                ]
+            self._last_cleanup_time = now
 
 
 class ContourPlot(Plot):
@@ -3183,7 +3442,7 @@ if __name__ == "__main__":
                 "border_color": rgb("808080"),
             }  # Border drawn around each graph
 
-            graph = GraphFXAA(
+            graph = GraphAA(
                 xlabel="Cheese",
                 ylabel="Apples",
                 x_ticks_minor=5,
@@ -3224,7 +3483,7 @@ if __name__ == "__main__":
 
             Clock.schedule_interval(self.update_points, 1 / 60.0)
 
-            graph2 = GraphFXAA(
+            graph2 = GraphAA(
                 xlabel="Position (m)",
                 ylabel="Time (s)",
                 x_ticks_minor=0,
