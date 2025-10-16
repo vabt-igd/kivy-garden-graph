@@ -2151,23 +2151,33 @@ class LinePlot(Plot):
 
 
 class SmoothLinePlot(Plot):
-    """Smooth Plot class, see module documentation for more information.
-    This plot uses a specific Fragment shader for custom anti aliasing.
+    """
+    Smooth line plot with adjustable line width and shader-based anti-aliasing.
+
+    - line_width: controls both the Line instruction thickness and the shader AA envelope.
+    - Shader uniform 'edge_scale' adapts AA softness to width.
+    - Uses a 64x1 ramp texture (0 -> 255 -> 0) for coverage smoothing.
     """
 
-    SMOOTH_FS = """
+    # Public property: set via kwargs or runtime (plot.line_width = 3.0)
+    line_width: float = NumericProperty(2.0)
+
+    # Fragment shader: uses 'edge_scale' to tune the soft edge width
+    SMOOTH_FS: str = """
     $HEADER$
+    uniform float edge_scale;  // scales AA soft edge with line width
 
     void main(void) {
-        float edgewidth = 0.015625 * 64.;
+        // 0.015625 == 1/64; *64 makes base = 1.0, then scaled by edge_scale
+        float edgewidth = edge_scale * 0.015625 * 64.0;
         float t = texture2D(texture0, tex_coord0).r;
-        float e = smoothstep(0., edgewidth, t);
-        gl_FragColor = frag_color * vec4(1, 1, 1, e);
+        float e = smoothstep(0.0, edgewidth, t);
+        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, e);
     }
     """
 
-    # 64x1 RGB image gradient data, values go from 0 -> 255 -> 0
-    GRADIENT_DATA = (
+    # 64x1 RGB gradient data (0 -> 255 -> 0), same as your original
+    GRADIENT_DATA: bytes = (
         b"\x00\x00\x00\x07\x07\x07\x0f\x0f\x0f\x17\x17\x17\x1f\x1f\x1f"
         b"'''///777???GGGOOOWWW___gggooowww\x7f\x7f\x7f\x87\x87\x87"
         b"\x8f\x8f\x8f\x97\x97\x97\x9f\x9f\x9f\xa7\xa7\xa7\xaf\xaf\xaf"
@@ -2180,52 +2190,132 @@ class SmoothLinePlot(Plot):
         b"\x08\x08\x08\x00\x00\x00"
     )
 
-    def create_drawings(self):
-        """Create the drawing instructions for the smooth line plot."""
-        from kivy.graphics import Line, RenderContext
+    # Shared texture cache (class-level)
+    _texture: Optional[Texture] = None
 
-        # Create texture for the shader on first use
-        if not hasattr(SmoothLinePlot, "_texture"):
-            tex = Texture.create(size=(1, 64), colorfmt="rgb")
-            tex.add_reload_observer(SmoothLinePlot._smooth_reload_observer)
-            SmoothLinePlot._texture = tex
-            SmoothLinePlot._smooth_reload_observer(tex)
+    # Instance-level render objects
+    _grc: Optional[RenderContext] = None
+    _gcolor: Optional[Color] = None
+    _gline: Optional[Line] = None
 
-        self._grc = RenderContext(
-            fs=SmoothLinePlot.SMOOTH_FS,
-            use_parent_modelview=True,
-            use_parent_projection=True,
-        )
-        with self._grc:
-            self._gcolor = Color(*self.color)
-            self._gline = Line(
-                points=[], cap="none", width=2.0, texture=SmoothLinePlot._texture
-            )
+    def __init__(self, **kwargs):
+        # Initialize instance fields before super() to avoid property callbacks
+        self._grc = None
+        self._gcolor = None
+        self._gline = None
 
-        return [self._grc]
+        super().__init__(**kwargs)
+
+        # Build drawing instructions
+        self._drawings = self.create_drawings()
 
     @staticmethod
-    def _smooth_reload_observer(texture):
-        """Reload texture data when needed."""
+    def _smooth_reload_observer(texture: Texture) -> None:
+        """Reload texture data when GL context is lost/restored."""
         texture.blit_buffer(SmoothLinePlot.GRADIENT_DATA, colorfmt="rgb")
 
-    def draw(self, *args):
+    @classmethod
+    def _ensure_texture(cls) -> Texture:
+        """Create (or reuse) the 64x1 AA ramp texture."""
+        if cls._texture is None:
+            try:
+                tex = Texture.create(size=(1, 64), colorfmt="rgb")
+                tex.add_reload_observer(SmoothLinePlot._smooth_reload_observer)
+                # Smoother sampling and avoid edge bleeding
+                tex.wrap = "clamp_to_edge"
+                tex.min_filter = "linear"
+                tex.mag_filter = "linear"
+                SmoothLinePlot._smooth_reload_observer(tex)
+                cls._texture = tex
+            except Exception as e:
+                Logger.warning(f"SmoothLinePlot: Texture creation failed: {e}")
+                # Fallback: create an empty texture to avoid None
+                cls._texture = Texture.create(size=(1, 1), colorfmt="rgb")
+        return cls._texture
+
+    def _edge_scale_from_width(self, lw: float) -> float:
+        """Map line width to shader edge_scale; clamp to a sensible range."""
+        return max(0.5, min(3.0, 0.6 * float(lw)))
+
+    def create_drawings(self) -> List:
+        """Create the drawing instructions for the smooth line plot."""
+        try:
+            # Ensure the ramp texture exists
+            tex = self._ensure_texture()
+
+            # Build the shader context
+            self._grc = RenderContext(
+                fs=SmoothLinePlot.SMOOTH_FS,
+                use_parent_modelview=True,
+                use_parent_projection=True,
+            )
+            # Push initial edge_scale based on current width
+            self._grc["edge_scale"] = self._edge_scale_from_width(self.line_width)
+
+            # Create the line instruction
+            with self._grc:
+                self._gcolor = Color(*self.color)
+                self._gline = Line(
+                    points=[],
+                    cap="none",  # use "round" if you prefer rounded joins
+                    width=float(self.line_width),
+                    texture=tex,
+                )
+
+            # Bind changes to keep visuals and shader in sync
+            self.bind(line_width=self.on_line_width)
+            self.bind(color=self.on_color)
+
+            return [self._grc] if self._grc else []
+        except Exception as e:
+            Logger.error(f"SmoothLinePlot: Failed to create drawings: {e}")
+            return []
+
+    def on_line_width(self, _instance, value: float) -> None:
+        """Update both Line width and shader AA envelope when line_width changes."""
+        try:
+            if self._gline is not None:
+                self._gline.width = float(value)
+            if self._grc is not None:
+                self._grc["edge_scale"] = self._edge_scale_from_width(float(value))
+        except Exception as e:
+            Logger.warning(f"SmoothLinePlot: on_line_width failed: {e}")
+
+    def on_color(self, _instance, value) -> None:
+        """Keep line color updated."""
+        try:
+            if self._gcolor is not None:
+                self._gcolor.rgba = value
+        except Exception as e:
+            Logger.warning(f"SmoothLinePlot: on_color failed: {e}")
+
+    def draw(self, *args) -> None:
         """Draw the smooth line plot."""
         super(SmoothLinePlot, self).draw(*args)
-        # Flatten the point list
-        points = []
+        if not self._gline:
+            return
+        # Flatten points
+        flat: List[float] = []
         for x, y in self.iterate_points():
-            points.extend([x, y])
-        self._gline.points = points
+            flat.extend([x, y])
+        self._gline.points = flat
 
-    def create_legend_drawings(self):
+    def create_legend_drawings(self) -> List:
         """Create the drawing instructions for the legend."""
-        return LinePlot.create_legend_drawings(self)
+        try:
+            return LinePlot.create_legend_drawings(self)
+        except Exception as e:
+            Logger.warning(f"SmoothLinePlot: Legend creation failed: {e}")
+            return []
 
     def draw_legend(self, center, maximum_size):
         """Draw the legend marker for this plot."""
-        self.line_width = self._gline.width
-        return LinePlot.draw_legend(self, center, maximum_size)
+        try:
+            if self._gline:
+                self.line_width = self._gline.width
+            return LinePlot.draw_legend(self, center, maximum_size)
+        except Exception as e:
+            Logger.warning(f"SmoothLinePlot: Legend drawing failed: {e}")
 
 
 class OptimizedSmoothLinePlot(Plot):
@@ -2542,29 +2632,36 @@ class OptimizedSmoothLinePlot(Plot):
 
 class OptimizedMeshStripPlot(Plot):
     """
-    Configurable linethickness plot using Mesh(mode='triangles').
-    Very fast Android-friendly line.
-    - Builds a quad per segment by extruding along the segment normal.
-    - Very fast on Android (no fragment texture sampling).
-    - line_width controls thickness in pixels (butt caps, bevel-ish joins).
-
-    Notes:
-    - This simple extrude per segment may show small overlaps/gaps at sharp corners.
-      For most telemetry/time-series, it is acceptable and much faster than shader AA.
+    Thick polyline without gaps using Mesh(mode='triangle_strip'):
+    - Computes per-vertex joined offsets (miter/bevel) to keep edges continuous.
+    - line_width is in dp (converted to screen pixels).
+    - Fast on Android (no fragment texture sampling).
     """
 
-    line_width = NumericProperty(2.0)
+    line_width = NumericProperty(2.0)  # in dp
     max_points = NumericProperty(1500)
     auto_cleanup = BooleanProperty(True)
     cleanup_interval = NumericProperty(30.0)
+    miter_limit = NumericProperty(4.0)  # max miter length relative to half width
 
     def __init__(self, **kwargs):
         self._rc: Optional[RenderContext] = None
         self._color: Optional[Color] = None
         self._mesh: Optional[Mesh] = None
         self._last_cleanup_time: float = 0.0
+
         super().__init__(**kwargs)
         self._drawings = self.create_drawings()
+
+        # Redraw when width/color changes
+        self.fbind("line_width", lambda *_: self.ask_draw())
+        self.fbind(
+            "color",
+            lambda *_: (
+                setattr(self._color, "rgba", self.color) if self._color else None
+            ),
+        )
+
         if self.auto_cleanup:
             Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
 
@@ -2575,13 +2672,7 @@ class OptimizedMeshStripPlot(Plot):
             )
             with self._rc:
                 self._color = Color(*self.color)
-                self._mesh = Mesh(mode="triangles", vertices=[], indices=[])
-            self.bind(
-                color=lambda _, v: (
-                    setattr(self._color, "rgba", v) if self._color else None
-                )
-            )
-            self.bind(line_width=lambda *_: None)  # width applied during draw
+                self._mesh = Mesh(mode="triangle_strip", vertices=[], indices=[])
             return [self._rc]
         except Exception as e:
             Logger.error(f"OptimizedThickMeshPlot: create_drawings failed: {e}")
@@ -2592,67 +2683,103 @@ class OptimizedMeshStripPlot(Plot):
         if not self._mesh:
             return
 
-        # Collect pixel-space points
         pts = list(self.iterate_points())
         if len(pts) > int(self.max_points):
             pts = pts[-int(self.max_points) :]
-        if len(pts) < 2:
+        # Drop consecutive duplicates
+        cleaned: List[Tuple[float, float]] = []
+        for p in pts:
+            if not cleaned or (
+                abs(p[0] - cleaned[-1][0]) > 1e-6 or abs(p[1] - cleaned[-1][1]) > 1e-6
+            ):
+                cleaned.append(p)
+        pts = cleaned
+
+        n = len(pts)
+        if n < 2:
             self._mesh.vertices = []
             self._mesh.indices = []
             return
 
-        half_w = float(self.line_width) * 0.5
+        half_w = float(dp(self.line_width)) * 0.5
+        miter_limit_px = self.miter_limit * half_w
 
-        # Build quads per non-degenerate segment
-        quad_vertices: List[float] = []  # x,y,u,v per vertex
-        quad_indices: List[int] = []
-        vert_idx = 0
-
-        def add_segment(p0: Tuple[float, float], p1: Tuple[float, float]):
-            nonlocal vert_idx
-            x0, y0 = p0
-            x1, y1 = p1
-            dx = x1 - x0
-            dy = y1 - y0
+        def normalize(dx: float, dy: float) -> Tuple[float, float]:
             L = (dx * dx + dy * dy) ** 0.5
-            if L <= 1e-6:
-                return  # skip degenerate
-            nx = -dy / L
-            ny = dx / L
-            # four vertices (quad): p0 +/- n*half_w, p1 +/- n*half_w
-            v0 = (x0 + nx * half_w, y0 + ny * half_w, 0.0, 0.0)
-            v1 = (x0 - nx * half_w, y0 - ny * half_w, 0.0, 0.0)
-            v2 = (x1 + nx * half_w, y1 + ny * half_w, 0.0, 0.0)
-            v3 = (x1 - nx * half_w, y1 - ny * half_w, 0.0, 0.0)
-            quad_vertices.extend(v0 + v1 + v2 + v3)
-            # two triangles: (v0,v1,v2) and (v1,v3,v2)
-            quad_indices.extend(
-                [
-                    vert_idx + 0,
-                    vert_idx + 1,
-                    vert_idx + 2,
-                    vert_idx + 1,
-                    vert_idx + 3,
-                    vert_idx + 2,
-                ]
-            )
-            vert_idx += 4
+            if L <= 1e-12:
+                return 0.0, 0.0
+            return dx / L, dy / L
 
-        for i in range(len(pts) - 1):
-            add_segment(pts[i], pts[i + 1])
+        def perp(dx: float, dy: float) -> Tuple[float, float]:
+            return -dy, dx
 
-        # Assign to mesh (reuse buffers when possible)
-        self._mesh.vertices = quad_vertices
-        self._mesh.indices = quad_indices
+        # Precompute directions and normals for segments
+        dirs: List[Tuple[float, float]] = []
+        norms: List[Tuple[float, float]] = []
+        for i in range(n - 1):
+            dx = pts[i + 1][0] - pts[i][0]
+            dy = pts[i + 1][1] - pts[i][1]
+            ux, uy = normalize(dx, dy)
+            nx, ny = perp(ux, uy)
+            dirs.append((ux, uy))
+            norms.append((nx, ny))
+
+        # Compute joined offset normal at each vertex (miter with clamp to miter_limit)
+        left: List[Tuple[float, float]] = []
+        right: List[Tuple[float, float]] = []
+
+        for i in range(n):
+            px, py = pts[i]
+            if i == 0:
+                nx, ny = norms[0]
+                ox, oy = nx * half_w, ny * half_w
+            elif i == n - 1:
+                nx, ny = norms[-1]
+                ox, oy = nx * half_w, ny * half_w
+            else:
+                n_prev = norms[i - 1]
+                n_next = norms[i]
+                # Bisector normal
+                bx = n_prev[0] + n_next[0]
+                by = n_prev[1] + n_next[1]
+                bx, by = normalize(bx, by)
+                # If bisector is degenerate (opposite normals), fall back to one side
+                if abs(bx) + abs(by) < 1e-12:
+                    bx, by = n_prev
+                # Scale miter: half_w / dot(bisector, n_prev)
+                dot = bx * n_prev[0] + by * n_prev[1]
+                scale = half_w / max(1e-6, dot)
+                # Clamp miter length to avoid spikes
+                mlen = (bx * scale) ** 2 + (by * scale) ** 2
+                if mlen > (miter_limit_px**2):
+                    scale = miter_limit_px / max(1e-6, (bx**2 + by**2) ** 0.5)
+                ox, oy = bx * scale, by * scale
+
+            left.append((px + ox, py + oy))
+            right.append((px - ox, py - oy))
+
+        # Build triangle strip vertices: L0, R0, L1, R1, ...
+        verts: List[float] = []
+        for i in range(n):
+            lx, ly = left[i]
+            rx, ry = right[i]
+            verts.extend([lx, ly, 0.0, 0.0])
+            verts.extend([rx, ry, 0.0, 0.0])
+
+        # Indices for triangle_strip: sequential
+        indices = list(range(2 * n))
+
+        self._mesh.vertices = verts
+        self._mesh.indices = indices
 
     def _periodic_cleanup(self, dt):
         now = Clock.get_time()
         if now - self._last_cleanup_time > float(self.cleanup_interval):
-            # shrink vertex buffer occasionally if it grew too big
-            if self._mesh and len(self._mesh.vertices) > 4 * 4 * int(self.max_points):
+            if self._mesh and len(self._mesh.vertices) > 2 * self.max_points * 4:
                 self._mesh.vertices = self._mesh.vertices[
-                    : 4 * 4 * int(self.max_points)
+                    : 2 * int(self.max_points) * 4
                 ]
+                self._mesh.indices = list(range(2 * int(self.max_points)))
             self._last_cleanup_time = now
 
 
