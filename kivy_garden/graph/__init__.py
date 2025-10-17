@@ -1469,83 +1469,72 @@ class Graph(Widget):
 class GraphAA(Graph):
     """
     Graph with AA:
-    - fxaa (default): line-oriented FXAA-lite (edge-only, extra_blur control).
-    - ssaa: true 2x supersampling (render into 2x FBO, downsample in linear color).
+    - fxaa (default): FXAA (default): A screen-space, edge-only AA post-pass
+     applied to the Graph’s FBO. It’s GLES2-safe (no derivatives), tunable
+     via fxaa_threshold, fxaa_strength, extra_blur, and works on Android
+     and desktop.
+    - ssaa: True 2× supersampling. The graph renders into a 2× FBO and
+    then downscales with a 4-tap box filter in approximate linear color
+    (toLinear/toSRGB). It’s also GLES2-safe. Performance cost is higher but
+    quality is better, especially for very thin lines.
 
     Properties persist and can be changed at runtime.
     """
 
-    # Line-oriented FXAA (edge-only) — GLES2-safe, desktop+Android
     FXAA_FS = """
+    // glsl
     $HEADER$
+    #ifdef GL_ES
+    precision mediump float;
+    #endif
 
-    uniform vec2  inv_tex_size;   // 1.0 / texture size
-    uniform float fxaa_threshold;  // 0.05..0.10
+    uniform vec2 inv_tex_size;
+    uniform float fxaa_threshold;  // e.g. 0.07
     uniform float fxaa_strength;   // 0..1
     uniform float extra_blur;      // 0..1
 
-    vec4 fetch4(vec2 uv){ return texture2D(texture0, uv); }
-    vec3 fetch(vec2 uv){ return fetch4(uv).rgb; }
+    vec4 tex4(vec2 uv){ return texture2D(texture0, uv); }
     float luma(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }
-    vec3 toLinear(vec3 c){ return pow(c, vec3(2.2)); }
-    vec3 toSRGB(vec3 c){ return pow(c, vec3(1.0/2.2)); }
 
-    void main(void){
-        vec2 uv = tex_coord0;
-        vec2 px = inv_tex_size;
+    void main(){
+        vec2 uv = tex_coord0, px = inv_tex_size;
+        vec4 c4 = tex4(uv);
+        vec3 c = c4.rgb; float a = c4.a;
 
-        vec4 sM4 = fetch4(uv);
-        vec3 cM = sM4.rgb;
-        float aM = sM4.a;
+        float lN = luma(tex4(uv + vec2(0.0,-px.y)).rgb);
+        float lS = luma(tex4(uv + vec2(0.0, px.y)).rgb);
+        float lE = luma(tex4(uv + vec2( px.x,0.0)).rgb);
+        float lW = luma(tex4(uv + vec2(-px.x,0.0)).rgb);
 
-        // Edge detection (4-neighbor gradient)
-        float lN = luma(fetch(uv + vec2( 0.0, -px.y)));
-        float lS = luma(fetch(uv + vec2( 0.0,  px.y)));
-        float lE = luma(fetch(uv + vec2(  px.x, 0.0)));
-        float lW = luma(fetch(uv + vec2( -px.x, 0.0)));
         vec2 g = vec2(lE - lW, lS - lN);
         float mag = max(abs(g.x), abs(g.y));
-
         if (mag < fxaa_threshold){
-            gl_FragColor = sM4 * frag_color;
+            gl_FragColor = vec4(c, a) * frag_color;
             return;
         }
 
-        // Edge normal (blend across)
         vec2 n = normalize(g + 1e-6);
-        vec2 stepUV = vec2(px.x * n.x, px.y * n.y);
+        vec2 stepUV = vec2(px.x*n.x, px.y*n.y);
 
-        // Tent across edge: ±0.5 and ±1.5 px
-        vec3 s1 = fetch(uv + stepUV * 0.5);
-        vec3 s2 = fetch(uv - stepUV * 0.5);
-        vec3 s3 = fetch(uv + stepUV * 1.5);
-        vec3 s4 = fetch(uv - stepUV * 1.5);
+        vec3 s1 = tex4(uv + stepUV*0.5).rgb;
+        vec3 s2 = tex4(uv - stepUV*0.5).rgb;
+        vec3 s3 = tex4(uv + stepUV*1.5).rgb;
+        vec3 s4 = tex4(uv - stepUV*1.5).rgb;
 
-        vec3 linTent = toLinear(cM) * 0.4
-                     + (toLinear(s1) + toLinear(s2)) * 0.15
-                     + (toLinear(s3) + toLinear(s4)) * 0.15;
-        vec3 tent = toSRGB(linTent);
+        vec3 tent = c*0.4 + (s1+s2)*0.15 + (s3+s4)*0.15;
+        vec3 minc = min(min(c,s1), min(s2, min(s3,s4)));
+        vec3 maxc = max(max(c,s1), max(s2, max(s3,s4)));
+        vec3 edgeBlur = mix(clamp(tent,minc,maxc),
+                            clamp((tex4(uv+vec2(px.x*0.5,0)).rgb
+                                + tex4(uv-vec2(px.x*0.5,0)).rgb
+                                + tex4(uv+vec2(0,px.y*0.5)).rgb
+                                + tex4(uv-vec2(0,px.y*0.5)).rgb) * 0.25,
+                                minc,maxc),
+                            clamp(extra_blur,0.0,1.0));
 
-        // Tiny isotropic component (edge-only)
-        vec3 i1 = fetch(uv + vec2(px.x * 0.5, 0.0));
-        vec3 i2 = fetch(uv - vec2(px.x * 0.5, 0.0));
-        vec3 i3 = fetch(uv + vec2(0.0, px.y * 0.5));
-        vec3 i4 = fetch(uv - vec2(0.0, px.y * 0.5));
-        vec3 iso = (i1 + i2 + i3 + i4) * 0.25;
-
-        // Neighborhood clip
-        vec3 minc = min(min(cM, s1), min(s2, min(s3, s4)));
-        vec3 maxc = max(max(cM, s1), max(s2, max(s3, s4)));
-        vec3 tentClipped = clamp(tent, minc, maxc);
-        vec3 isoClipped  = clamp(iso,  minc, maxc);
-
-        // Mix tent with isotropic component; then edge-weighted blend
-        float eb = clamp(extra_blur, 0.0, 1.0);
-        vec3 edgeBlur = mix(tentClipped, isoClipped, eb);
-        float w = fxaa_strength * smoothstep(fxaa_threshold, fxaa_threshold * 4.0, mag);
-
-        vec3 outc = mix(cM, edgeBlur, w);
-        gl_FragColor = vec4(outc, aM) * frag_color;
+        float w = fxaa_strength * smoothstep(fxaa_threshold, fxaa_threshold*4.0, mag);
+        vec3 outc = mix(c, edgeBlur, w);
+        gl_FragColor = vec4(outc, a) * frag_color;
     }
     """
 
@@ -2344,27 +2333,27 @@ class OptimizedSmoothLinePlot(Plot):
 
     # AA Shader
     AA_FS_DERIVATIVES = """
-    // GLSL - coverage AA with derivatives (fallback to your current if extension missing)
+    // GLSL
     $HEADER$
     #ifdef GL_ES
     precision mediump float;
-    #extension GL_OES_standard_derivatives : enable
     #endif
-    uniform float edge_scale;     // tune softness 0.5..3.0
+
+    uniform float edge_scale;
 
     void main(void) {
-            float t = texture2D(texture0, tex_coord0).r;  // ramp sample
-        #ifdef GL_OES_standard_derivatives
-            // Use local frequency to adapt smoothstep width
-            float w = fwidth(t) * edge_scale;
-            // Center ramp around 0.5: more symmetric AA
-            float a = smoothstep(0.5 - w, 0.5 + w, t);
-        #else
-            // Fallback: your existing scale
-            float edgewidth = edge_scale;
-            float a = smoothstep(0.0, edgewidth, t);
-        #endif
-            gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
+        float t = texture2D(texture0, tex_coord0).r;
+
+    #ifdef GL_OES_standard_derivatives
+        // Only if the driver allows derivatives without enable
+        float w = fwidth(t) * edge_scale;
+        float a = smoothstep(0.5 - w, 0.5 + w, t);
+    #else
+        // Fallback: fixed-width smoothing, no derivatives used
+        float a = smoothstep(0.0, edge_scale, t);
+    #endif
+
+        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
 
@@ -2628,6 +2617,160 @@ class OptimizedSmoothLinePlot(Plot):
                 self._grc.clear()
         except Exception:
             pass
+
+
+class AALineStripPlot(Plot):
+    """GPU line AA using triangle strip + analytic alpha.
+    - No tex_coords, we store signed distance in the vertex 'v' component.
+    - GLES2/3 safe: fragment shader uses tex_coord0.y only (no derivatives/texture sampling).
+    """
+
+    line_width = NumericProperty(2.0)    # dp (visual thickness)
+    feather_px = NumericProperty(1.25)   # AA softness in pixels
+    max_points = NumericProperty(4000)
+
+    # Fragment shader: fade alpha within 'feather' pixels near the strip edge.
+    FS = """
+    $HEADER$
+    #ifdef GL_ES
+    precision mediump float;
+    #endif
+    uniform float half_width;
+    uniform float feather;
+
+    // Kivy passes each vertex as (x, y, u, v). We store signed distance in v:
+    // +half_width for left edge, -half_width for right edge.
+    void main(void){
+        float d = abs(tex_coord0.y);  // 0 at center, half_width at edge (in pixels)
+        float a = 1.0 - smoothstep(half_width - feather, half_width, d);
+        vec4 c = frag_color;
+        c.a *= a;
+        gl_FragColor = c;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        self._rc = None
+        self._color = None
+        self._mesh = None
+        super().__init__(**kwargs)
+        self._drawings = self.create_drawings()
+
+        # Redraw on property changes
+        self.fbind("line_width", lambda *_: self.ask_draw())
+        self.fbind("feather_px", lambda *_: self.ask_draw())
+        self.fbind(
+            "color",
+            lambda *_: setattr(self._color, "rgba", self.color) if self._color else None,
+        )
+
+    def create_drawings(self):
+        """Create RenderContext + Mesh. No use of tex_coords; we only set vertices/indices."""
+        try:
+            self._rc = RenderContext(
+                fs=self.FS, use_parent_modelview=True, use_parent_projection=True
+            )
+            with self._rc:
+                self._color = Color(*self.color)
+                # Mesh vertices are [x, y, u, v] per vertex
+                self._mesh = Mesh(mode="triangle_strip", vertices=[], indices=[])
+            return [self._rc]
+        except Exception as e:
+            Logger.error(f"AALineStripPlot: create_drawings failed: {e}")
+            return []
+
+    def draw(self, *args):
+        """Build a triangle strip: per point -> left/right vertices with v=±half_width."""
+        super().draw(*args)
+        if not self._mesh:
+            return
+
+        pts = list(self.iterate_points())
+        if len(pts) < 2:
+            # Clear only vertices/indices; DO NOT touch tex_coords
+            self._mesh.vertices = []
+            self._mesh.indices = []
+            return
+
+        # Limit points
+        maxn = int(self.max_points)
+        if len(pts) > maxn:
+            pts = pts[-maxn:]
+
+        # Drop consecutive duplicates
+        cleaned = []
+        for p in pts:
+            if not cleaned or (
+                abs(p[0] - cleaned[-1][0]) > 1e-6 or abs(p[1] - cleaned[-1][1]) > 1e-6
+            ):
+                cleaned.append(p)
+        pts = cleaned
+        n = len(pts)
+        if n < 2:
+            self._mesh.vertices = []
+            self._mesh.indices = []
+            return
+
+        hw = float(dp(self.line_width)) * 0.5  # half width in pixels
+        miter_limit = 4.0 * hw
+
+        def norm(dx, dy):
+            L = (dx * dx + dy * dy) ** 0.5
+            return (dx / L, dy / L) if L > 1e-12 else (0.0, 0.0)
+
+        def perp(dx, dy):
+            return -dy, dx
+
+        # Segment directions and normals
+        norms = []
+        for i in range(n - 1):
+            ux, uy = norm(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
+            nx, ny = perp(ux, uy)
+            norms.append((nx, ny))
+
+        # Compute joined offsets with miter clamp
+        left, right = [], []
+        for i in range(n):
+            px, py = pts[i]
+            if i == 0:
+                nx, ny = norms[0]
+                ox, oy = nx * hw, ny * hw
+            elif i == n - 1:
+                nx, ny = norms[-1]
+                ox, oy = nx * hw, ny * hw
+            else:
+                n1 = norms[i - 1]
+                n2 = norms[i]
+                bx, by = n1[0] + n2[0], n1[1] + n2[1]
+                bl = (bx * bx + by * by) ** 0.5
+                if bl <= 1e-6:
+                    bx, by = n2
+                    bl = (bx * bx + by * by) ** 0.5
+                bx, by = bx / bl, by / bl
+                dot = bx * n1[0] + by * n1[1]
+                scale = hw / max(1e-6, dot)
+                if scale > miter_limit:
+                    scale = miter_limit
+                ox, oy = bx * scale, by * scale
+            left.append((px + ox, py + oy))
+            right.append((px - ox, py - oy))
+
+        # Build vertices with v = signed distance (±hw). u can be 0.0.
+        verts = []
+        for i in range(n):
+            lx, ly = left[i]
+            rx, ry = right[i]
+            verts.extend([lx, ly, 0.0, +hw])  # left vertex: v=+hw
+            verts.extend([rx, ry, 0.0, -hw])  # right vertex: v=-hw
+
+        indices = list(range(2 * n))
+
+        self._mesh.vertices = verts
+        self._mesh.indices = indices
+
+        # Update uniforms
+        self._rc["half_width"] = hw
+        self._rc["feather"] = float(self.feather_px)
 
 
 class OptimizedMeshStripPlot(Plot):
