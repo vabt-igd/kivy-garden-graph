@@ -2613,84 +2613,92 @@ class SmoothLinePlot(Plot):
 
 class OptimizedSmoothLinePlot(Plot):
     """
-    Efficient real-time line plot with platform-specific antialiasing:
-    - Android: GLES2-compatible shader without derivatives
-    - Desktop: Adaptive antialiasing using derivatives when available
-    - Flicker-free rendering (clears only when parameters change)
-    - Configurable point decimation (disabled by default)
+    Efficient real-time line plot with antialiasing support and robust shader fallback.
+
+    Features:
+    - Tries a derivatives-based AA shader first; falls back to a simpler shader on error.
+    - Shared 1D texture ramp for smooth alpha edges (when AA enabled).
+    - Minimal overdraw and periodic cleanup to reduce fragmentation.
     """
 
-    # Performance settings
-    max_points = NumericProperty(2000)
-    cleanup_interval = NumericProperty(30.0)
-    auto_cleanup = BooleanProperty(True)
-    decimate = BooleanProperty(False)  # Disabled by default to prevent visual shifts
-    preserve_extrema = BooleanProperty(True)
+    max_points: int = NumericProperty(2000)
+    """Maximum number of (x, y) points to keep in the ring buffer."""
 
-    # Visual properties
-    line_width = NumericProperty(10.0)
-    enable_antialiasing = BooleanProperty(True)
+    cleanup_interval: float = NumericProperty(30.0)
+    """Interval in seconds between periodic buffer cleanups."""
+
+    auto_cleanup: bool = BooleanProperty(True)
+    """Whether to run automatic periodic cleanup."""
+
+    decimate: bool = BooleanProperty(False)
+    """Whether to decimate points (disabled by default to prevent visual shifts)."""
+
+    preserve_extrema: bool = BooleanProperty(True)
+    """Whether to preserve extrema when decimating."""
+
+    line_width: float = NumericProperty(10.0)
+    """Line width in pixels."""
+
+    enable_antialiasing: bool = BooleanProperty(True)
+    """Toggle antialiasing (uses texture ramp)."""
 
     # Shared texture resources
     _texture_cache: Optional[Texture] = None
     _texture_refs: int = 0
 
-    # Antialiasing fragment shader supporting multiple platforms
-    # Shader with fwidth
-    AA_FS_DERIVATIVES = """
+    # Fragment shaders
+    AA_FS_DERIVATIVES: str = """
     $HEADER$
-
     #ifdef GL_ES
-    precision mediump float;
+    precision highp float;
+    #extension GL_OES_standard_derivatives : enable
     #endif
 
     uniform float edge_scale;
 
     void main(void) {
         float t = texture2D(texture0, tex_coord0).r;
-
     #ifdef GL_OES_standard_derivatives
         float w = fwidth(t) * edge_scale;
         float a = smoothstep(0.5 - w, 0.5 + w, t);
     #else
-        float a = smoothstep(0.0, edge_scale, t);
+        float a = smoothstep(0.0, max(0.1, edge_scale), t);
     #endif
-
         gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
-    # Fallback shader
-    AA_FS_NO_DERIVATIVES = """
-    $HEADER$
 
+    AA_FS_NO_DERIVATIVES: str = """
+    $HEADER$
     #ifdef GL_ES
-    precision mediump float;
+    precision highp float;
     #endif
 
     uniform float edge_scale;
 
     void main(void) {
         float t = texture2D(texture0, tex_coord0).r;
-        float a = smoothstep(0.0, edge_scale, t);
+        float scale = max(0.1, edge_scale);
+        float a = smoothstep(0.0, scale, t);
         gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
 
     @classmethod
     def _get_shared_texture(cls) -> Optional[Texture]:
-        """Create/retrieve shared antialiasing texture."""
+        """Create or retrieve a shared 1x128 RGB ramp texture for antialiasing."""
         if cls._texture_cache is None:
             try:
-                size = 128
-                tex = Texture.create(size=(1, size), colorfmt="rgb")
+                size: int = 128
+                tex: Texture = Texture.create(size=(1, size), colorfmt="rgb")
 
                 # Generate symmetric ramp: 0..255..0
-                half = size // 2
-                up = [round(255.0 * i / half) for i in range(half + 1)]
-                ramp = up + up[-2::-1]
+                half: int = size // 2
+                up: List[int] = [round(255.0 * i / half) for i in range(half + 1)]
+                ramp: List[int] = up + up[-2::-1]
 
                 # Convert to RGB bytes
-                rgb = [v for v in ramp[:size] for _ in range(3)]
+                rgb: List[int] = [v for v in ramp[:size] for _ in range(3)]
                 tex.blit_buffer(bytes(rgb), colorfmt="rgb")
 
                 # Configure texture parameters
@@ -2709,13 +2717,14 @@ class OptimizedSmoothLinePlot(Plot):
         return cls._texture_cache
 
     @classmethod
-    def _release_shared_texture(cls):
-        """Release shared texture reference."""
+    def _release_shared_texture(cls) -> None:
+        """Release one reference to the shared AA texture (no deletion, only refcount)."""
         cls._texture_refs = max(0, cls._texture_refs - 1)
         if cls._texture_refs == 0:
             Logger.debug("All shared AA texture refs released")
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize plot state, graphics pipeline, and cleanup scheduling."""
         # Graphics components
         self._grc: Optional[RenderContext] = None
         self._gcolor: Optional[Color] = None
@@ -2723,12 +2732,12 @@ class OptimizedSmoothLinePlot(Plot):
         self._texture: Optional[Texture] = None
 
         # Data buffers
-        maxlen = int(kwargs.get("max_points", self.max_points))
-        self._ring: deque = deque(maxlen=maxlen)
+        maxlen: int = int(kwargs.get("max_points", self.max_points))
+        self._ring: Deque[Tuple[float, float]] = deque(maxlen=maxlen)
         self._flat_points: List[float] = [0.0] * (2 * maxlen)
 
         # State tracking
-        self._last_params_sig: Optional[Tuple] = None
+        self._last_params_sig: Optional[Tuple[Any, ...]] = None
         self._last_ring_len: int = 0
         self._last_ring_tail: Optional[Tuple[float, float]] = None
         self._is_drawing: bool = False
@@ -2737,33 +2746,77 @@ class OptimizedSmoothLinePlot(Plot):
         self._needs_clear: bool = False
 
         super().__init__(**kwargs)
-        self._drawings = self.create_drawings()
+        self._drawings: List[Any] = self.create_drawings()
 
         if self.auto_cleanup:
             Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
 
-    def create_drawings(self) -> List:
-        """Initialize graphics pipeline."""
+    def _make_context(self, fs_source: str) -> RenderContext:
+        """Create a RenderContext with the given fragment shader source and set uniforms."""
+        rc: RenderContext = RenderContext(
+            fs=fs_source, use_parent_modelview=True, use_parent_projection=True
+        )
+        rc["edge_scale"] = self._compute_edge_scale()
+        return rc
+
+    def create_drawings(self) -> List[Any]:
+        """
+        Initialize the graphics pipeline.
+
+        Tries the derivatives shader if supported and AA is enabled; falls back to the
+        no-derivatives shader automatically if compilation fails.
+        """
         try:
+            # Query GL extensions (best-effort)
+            try:
+                raw = glGetString(GL_EXTENSIONS)
+                extensions_str: str = raw.decode("utf-8") if raw else ""
+            except Exception:
+                extensions_str = ""
+            extensions: List[str] = extensions_str.split() if extensions_str else []
+            has_derivatives: bool = "GL_OES_standard_derivatives" in extensions
+            # prefer_derivatives: bool = has_derivatives and self.enable_antialiasing
+            prefer_derivatives: bool = self.enable_antialiasing
 
-            # Check OpenGL state
-            extensions_str = glGetString(GL_EXTENSIONS).decode("utf-8")
-            extensions = extensions_str.split() if extensions_str else []
+            Logger.debug(f"OpenGL Derivative Support: {has_derivatives}")
+            Logger.debug(f"OpenGL Details: {extensions}")
 
-            # Bestimme ob GL_OES_standard_derivatives verfügbar ist
-            has_derivatives = "GL_OES_standard_derivatives" in extensions
-
-            # Wähle den entsprechenden Shader
-            if has_derivatives and self.enable_antialiasing:
-                shader_source = self.AA_FS_DERIVATIVES
-            else:
-                shader_source = self.AA_FS_NO_DERIVATIVES
-
-            self._grc = RenderContext(
-                fs=shader_source, use_parent_modelview=True, use_parent_projection=True
+            # Try preferred shader, then fallback on error
+            fs: str = (
+                self.AA_FS_DERIVATIVES
+                if prefer_derivatives
+                else self.AA_FS_NO_DERIVATIVES
             )
-            self._grc["edge_scale"] = self._compute_edge_scale()
+            Logger.debug(f"Trying FS:\n{fs}")
 
+            self._grc = self._make_context(fs)
+
+            # Check shader compilation status more directly
+            shader_failed = False
+            try:
+                # Access the shader object directly
+                shader = getattr(self._grc, "shader", None)
+                if shader:
+                    # Check if there are compilation errors
+                    error_log = getattr(shader, "error_log", "")
+                    success = getattr(shader, "success", True)
+
+                    if not success or (error_log and error_log.strip()):
+                        Logger.warning(f"Shader compilation error: {error_log}")
+                        Logger.warning(f"-> Problematic shader source:\n{fs}")
+                        shader_failed = True
+            except Exception as check_error:
+                Logger.warning(f"Error checking shader status: {check_error}")
+                shader_failed = True
+
+            # If shader failed and we were trying derivatives, fall back
+            if shader_failed and prefer_derivatives:
+                Logger.info(
+                    "Falling back to non-derivative shader due to compilation failure."
+                )
+                self._grc = self._make_context(self.AA_FS_NO_DERIVATIVES)
+
+            # Prepare texture only if AA is enabled
             self._texture = (
                 self._get_shared_texture() if self.enable_antialiasing else None
             )
@@ -2774,6 +2827,7 @@ class OptimizedSmoothLinePlot(Plot):
                     points=[], cap="none", width=self.line_width, texture=self._texture
                 )
 
+            # React to color changes
             self.bind(
                 color=lambda _, v: (
                     setattr(self._gcolor, "rgba", v) if self._gcolor else None
@@ -2784,8 +2838,8 @@ class OptimizedSmoothLinePlot(Plot):
             Logger.error(f"Failed to create drawings: {e}")
             return []
 
-    def recreate_drawings(self):
-        """Rebuild graphics pipeline after configuration changes."""
+    def recreate_drawings(self) -> None:
+        """Rebuild the graphics pipeline (e.g., after toggling AA or changing line width)."""
         try:
             if self._grc:
                 self._grc.clear()
@@ -2794,18 +2848,27 @@ class OptimizedSmoothLinePlot(Plot):
         except Exception as e:
             Logger.warning(f"recreate_drawings failed: {e}")
 
-    def feed_point(self, x: float, y: float):
-        """Add new data point to plot."""
+    def feed_point(self, x: float, y: float) -> None:
+        """Append a new (x, y) data point and request a draw."""
         self._ring.append((x, y))
         self.ask_draw()
 
-    def update(self, xlog, xmin, xmax, ylog, ymin, ymax, size):
-        """Handle parameter updates."""
+    def update(
+        self,
+        xlog: bool,
+        xmin: float,
+        xmax: float,
+        ylog: bool,
+        ymin: float,
+        ymax: float,
+        size: Tuple[float, float, float, float],
+    ) -> None:
+        """Handle axis/scale/viewport updates from the parent graph."""
         super().update(xlog, xmin, xmax, ylog, ymin, ymax, size)
         self._needs_clear = True
 
     def iterate_points(self) -> Iterator[Tuple[float, float]]:
-        """Generate transformed plot coordinates."""
+        """Yield transformed (x, y) points in pixel coordinates."""
         if self._ring:
             x_px = self.x_px()
             y_px = self.y_px()
@@ -2814,8 +2877,8 @@ class OptimizedSmoothLinePlot(Plot):
         else:
             yield from super().iterate_points()
 
-    def draw(self, *args):
-        """Main rendering entry point."""
+    def draw(self, *args: Any) -> None:
+        """Render entry point invoked by the graph; ensures single draw at a time."""
         if self._is_drawing:
             return
         self._is_drawing = True
@@ -2828,38 +2891,36 @@ class OptimizedSmoothLinePlot(Plot):
             self._is_drawing = False
 
     def _view_valid(self) -> bool:
-        """Check if viewport has valid dimensions."""
+        """Return True if the current viewport dimensions are valid (non-trivial)."""
         x0, y0, x1, y1 = self.params.get("size", (0, 0, 0, 0))
         return (x1 - x0) > 1 and (y1 - y0) > 1
 
-    def _draw_optimized(self):
-        """Efficiently render plot lines."""
+    def _draw_optimized(self) -> None:
+        """Efficiently update and draw the polyline using the cached flat buffer."""
         if not self._gline or not self._view_valid():
             return
 
         self._draw_count += 1
-        now = Clock.get_time()
+        now: float = Clock.get_time()
 
-        ring_len = len(self._ring)
-        ring_tail = self._ring[-1] if ring_len else None
+        ring_len: int = len(self._ring)
+        ring_tail: Optional[Tuple[float, float]] = self._ring[-1] if ring_len else None
 
         # Skip redundant draws
         if ring_len == self._last_ring_len and ring_tail == self._last_ring_tail:
             return
 
-        pts = list(self.iterate_points())
-        n = min(len(pts), int(self.max_points))
+        pts: List[Tuple[float, float]] = list(self.iterate_points())
+        n: int = min(len(pts), int(self.max_points))
 
         if n < 2:
             self._gline.points = []
         else:
-            # Reuse existing buffer when possible
-            fp = self._flat_points
-            need = 2 * n
+            fp: List[float] = self._flat_points
+            need: int = 2 * n
             if len(fp) < need:
                 fp.extend([0.0] * (need - len(fp)))
 
-            # Flatten coordinate pairs
             for i in range(n):
                 fp[2 * i] = pts[i][0]
                 fp[2 * i + 1] = pts[i][1]
@@ -2873,47 +2934,47 @@ class OptimizedSmoothLinePlot(Plot):
             self._last_cleanup_time = now
 
     def _should_cleanup(self, current_time: float) -> bool:
-        """Determine if cleanup is needed."""
+        """Return True if it is time to run periodic buffer cleanup."""
         return self.auto_cleanup and (
             current_time - self._last_cleanup_time > float(self.cleanup_interval)
         )
 
-    def _cleanup_old_data(self):
-        """Reset buffers to reduce memory fragmentation."""
+    def _cleanup_old_data(self) -> None:
+        """Reset internal buffers to reduce memory fragmentation."""
         self._flat_points = [0.0] * (2 * int(self.max_points))
         if self._ring.maxlen != int(self.max_points):
             self._ring = deque(self._ring, maxlen=int(self.max_points))
         Logger.debug("Cleanup completed")
 
-    def _periodic_cleanup(self, dt):
-        """Scheduled cleanup handler."""
+    def _periodic_cleanup(self, dt: float) -> None:
+        """Scheduler callback that triggers cleanup at the configured interval."""
         try:
-            now = Clock.get_time()
+            now: float = Clock.get_time()
             if now - self._last_cleanup_time > self.cleanup_interval:
                 self._cleanup_old_data()
                 self._last_cleanup_time = now
         except Exception as e:
             Logger.warning(f"Periodic cleanup failed: {e}")
 
-    def on_line_width(self, _, value):
-        """Handle line width changes."""
+    def on_line_width(self, _: Any, value: float) -> None:
+        """Kivy property callback: apply new line width and update edge scale."""
         if self._gline:
             self._gline.width = value
         if self._grc and self.enable_antialiasing:
             self._grc["edge_scale"] = self._compute_edge_scale()
 
-    def on_enable_antialiasing(self, _, __):
-        """Handle antialiasing toggle."""
+    def on_enable_antialiasing(self, _: Any, __: bool) -> None:
+        """Kivy property callback: rebuild pipeline when AA is toggled."""
         self.recreate_drawings()
 
-    def on_max_points(self, _, value):
-        """Handle buffer size changes."""
-        value = int(max(2, value))
-        self._ring = deque(self._ring, maxlen=value)
-        self._flat_points = [0.0] * (2 * value)
+    def on_max_points(self, _: Any, value: int) -> None:
+        """Kivy property callback: resize buffers when the maximum point count changes."""
+        value_i: int = int(max(2, value))
+        self._ring = deque(self._ring, maxlen=value_i)
+        self._flat_points = [0.0] * (2 * value_i)
 
-    def on_points(self, _, value):
-        """Handle bulk point updates."""
+    def on_points(self, _: Any, value: Optional[List[Tuple[float, float]]]) -> None:
+        """Kivy property callback: replace the data set with a provided list of points."""
         try:
             if value:
                 self._ring = deque(
@@ -2922,46 +2983,46 @@ class OptimizedSmoothLinePlot(Plot):
             else:
                 self._ring.clear()
         except Exception:
+            # Ignore malformed inputs
             pass
 
-    def on_color(self, _, value):
-        """Handle color changes."""
+    def on_color(self, _: Any, value: Tuple[float, float, float, float]) -> None:
+        """Kivy property callback: update the line color."""
         if self._gcolor:
             self._gcolor.rgba = value
 
     def _compute_edge_scale(self) -> float:
-        """Calculate antialiasing edge scale factor."""
-        lw = float(self.line_width)
+        """Compute the antialiasing edge scale factor from the current line width."""
+        lw: float = float(self.line_width)
         return max(0.5, min(3.0, 0.6 * lw))
 
-    def create_legend_drawings(self) -> List:
-        """Create legend representation."""
+    def create_legend_drawings(self) -> List[Any]:
+        """Create a simplified legend representation using the garden graph helper."""
         try:
-            from kivy.garden.graph import LinePlot
-
             return LinePlot.create_legend_drawings(self)
         except Exception as e:
             Logger.warning(f"Legend creation failed: {e}")
             return []
 
-    def draw_legend(self, center, maximum_size):
-        """Draw legend icon."""
+    def draw_legend(
+        self, center: Tuple[float, float], maximum_size: Tuple[float, float]
+    ) -> Optional[List[Any]]:
+        """Draw the legend icon for this plot."""
         try:
-            from kivy.garden.graph import LinePlot
-
             if self._gline:
                 self.line_width = self._gline.width
             return LinePlot.draw_legend(self, center, maximum_size)
         except Exception as e:
             Logger.warning(f"Legend drawing failed: {e}")
+            return None
 
-    def force_refresh(self):
-        """Trigger complete redraw."""
+    def force_refresh(self) -> None:
+        """Clear cached points and request a full redraw."""
         self._flat_points = [0.0] * (2 * int(self.max_points))
         self.ask_draw()
 
-    def __del__(self):
-        """Clean up resources."""
+    def __del__(self) -> None:
+        """Attempt to release resources and unschedule callbacks on destruction."""
         try:
             Clock.unschedule(self._periodic_cleanup)
             self._release_shared_texture()
