@@ -40,7 +40,19 @@ The current availables plots are:
 
     * `MeshStemPlot`
     * `MeshLinePlot`
-    * `SmoothLinePlot` - require Kivy 1.8.1
+    * `SmoothLinePlot`
+    * `MeshLinePlot`
+    * `MeshStemPlot`
+    * `LinePlot`
+    * `SmoothLinePlot`
+    * `OptimizedSmoothLinePlot`
+    * `AALineStripPlot`
+    * `MeshStripPlot`
+    * `ContourPlot`
+    * `ScatterPlot`
+    * `PointPlot`
+    * `LineAndMarkerPlot`
+    - require Kivy 2.3.0
 
 .. note::
 
@@ -52,11 +64,15 @@ The current availables plots are:
 
 __all__ = (
     "Graph",
+    "GraphAA",
     "Plot",
     "MeshLinePlot",
     "MeshStemPlot",
     "LinePlot",
     "SmoothLinePlot",
+    "OptimizedSmoothLinePlot",
+    "AALineStripPlot",
+    "MeshStripPlot",
     "ContourPlot",
     "ScatterPlot",
     "PointPlot",
@@ -67,7 +83,7 @@ from collections import deque
 from decimal import Decimal
 from itertools import chain
 from math import log10, floor, ceil, sqrt
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 import weakref
 
 from kivy import metrics
@@ -255,7 +271,7 @@ class GraphLegend(BoxLayout):
 
 
 class Graph(Widget):
-    """Graph class, see module documentation for more information."""
+    """Graph class for (real-time) plotting applications."""
 
     # Triggers for different update types
     _trigger = ObjectProperty(None)  # Full graphics reload
@@ -277,6 +293,16 @@ class Graph(Widget):
     _ticks_minorx = ListProperty([])
     _ticks_majory = ListProperty([])
     _ticks_minory = ListProperty([])
+
+    # Optimization flags
+    _dirty_full = BooleanProperty(False)
+    _dirty_size = BooleanProperty(False)
+    _dirty_colors = BooleanProperty(False)
+    _dirty_legend = BooleanProperty(False)
+
+    # Cached calculations
+    _cached_bounds: Tuple[float, float, float, float] = (0, 0, 0, 0)
+    _cached_params_hash: int = 0
 
     # Color properties
     tick_color = ListProperty([0.25, 0.25, 0.25, 1])
@@ -320,24 +346,26 @@ class Graph(Widget):
     and defaults to the empty dict.
     """
 
-    def _get_legend(self):
+    def _get_legend(self) -> Optional["GraphLegend"]:
         """Get the current legend."""
         return self._legend
 
-    def _set_legend(self, legend: Union[Tuple[str, Any], None]):
+    def _set_legend(
+        self, legend: Union[List[Tuple[str, Any]], "GraphLegend", None]
+    ) -> bool:
         """Set or update the legend with plot data."""
         if legend and self._legend:
-            # Clear existing legend children
+            # Clear existing legend children efficiently
             while self._legend.children:
                 self._legend.remove_widget(self._legend.children[0])
         elif legend:
             # Create new legend
             self._legend = GraphLegend()
             self._legend.bind(
-                pos=self._trigger_legend,
-                size=self._trigger_legend,
-                pos_hint=self._trigger_legend,
-                marker_size=self._trigger_legend,
+                pos=self._mark_legend_dirty,
+                size=self._mark_legend_dirty,
+                pos_hint=self._mark_legend_dirty,
+                marker_size=self._mark_legend_dirty,
             )
             self.add_widget(self._legend)
         elif self._legend:
@@ -371,7 +399,7 @@ class Graph(Widget):
             self._legend.add_widget(label)
         return True
 
-    legend: Union[List[Tuple[str, Any]], GraphLegend] = AliasProperty(
+    legend: Union[List[Tuple[str, Any]], "GraphLegend", None] = AliasProperty(
         _get_legend, _set_legend
     )
     """Legend of graph's plots.
@@ -400,8 +428,8 @@ class Graph(Widget):
 
     def __init__(self, **kwargs):
         # Initialize legend-related attributes
-        self._legend: Optional[GraphLegend] = None
-        self._legend_plots: Tuple[Plot, ...] = tuple()
+        self._legend: Optional["GraphLegend"] = None
+        self._legend_plots: List[Any] = []
 
         super(Graph, self).__init__(**kwargs)
 
@@ -426,67 +454,111 @@ class Graph(Widget):
         # Initialize rectangle mesh
         mesh = self._mesh_rect
         mesh.vertices = [0] * (5 * 4)
-        mesh.indices = range(5)
+        mesh.indices = list(range(5))
 
         # Create plot area with stencil clipping
         self._plot_area = StencilView()
         self.add_widget(self._plot_area)
 
-        # Create update triggers
-        self._trigger = Clock.create_trigger(self._redraw_all)
-        self._trigger_size = Clock.create_trigger(self._redraw_size)
-        self._trigger_color = Clock.create_trigger(self._update_colors)
-        self._trigger_legend = Clock.create_trigger(self._update_legend)
+        # Create update triggers with immediate execution
+        self._trigger = Clock.create_trigger(self._process_full_redraw, -1)
+        self._trigger_size = Clock.create_trigger(self._process_size_update, -1)
+        self._trigger_color = Clock.create_trigger(self._process_color_update, -1)
+        self._trigger_legend = Clock.create_trigger(self._process_legend_update, -1)
 
         # Bind properties to appropriate triggers
         self.bind(
-            center=self._trigger_size,
-            padding=self._trigger_size,
-            precision=self._trigger_size,
-            plots=self._trigger_size,
-            x_grid=self._trigger_size,
-            y_grid=self._trigger_size,
-            draw_border=self._trigger_size,
+            center=self._mark_size_dirty,
+            padding=self._mark_size_dirty,
+            precision=self._mark_full_dirty,
+            plots=self._mark_size_dirty,
+            x_grid=self._mark_size_dirty,
+            y_grid=self._mark_size_dirty,
+            draw_border=self._mark_size_dirty,
         )
 
         self.bind(
-            xmin=self._trigger,
-            xmax=self._trigger,
-            xlog=self._trigger,
-            x_ticks_major=self._trigger,
-            x_ticks_minor=self._trigger,
-            xlabel=self._trigger,
-            x_grid_label=self._trigger,
-            ymin=self._trigger,
-            ymax=self._trigger,
-            ylog=self._trigger,
-            y_ticks_major=self._trigger,
-            y_ticks_minor=self._trigger,
-            ylabel=self._trigger,
-            y_grid_label=self._trigger,
-            label_options=self._trigger,
-            x_ticks_angle=self._trigger,
-            tick_label_options=self._trigger,
-            legend_label_options=self._trigger,
+            xmin=self._mark_full_dirty,
+            xmax=self._mark_full_dirty,
+            xlog=self._mark_full_dirty,
+            x_ticks_major=self._mark_full_dirty,
+            x_ticks_minor=self._mark_full_dirty,
+            xlabel=self._mark_full_dirty,
+            x_grid_label=self._mark_full_dirty,
+            ymin=self._mark_full_dirty,
+            ymax=self._mark_full_dirty,
+            ylog=self._mark_full_dirty,
+            y_ticks_major=self._mark_full_dirty,
+            y_ticks_minor=self._mark_full_dirty,
+            ylabel=self._mark_full_dirty,
+            y_grid_label=self._mark_full_dirty,
+            label_options=self._mark_full_dirty,
+            x_ticks_angle=self._mark_full_dirty,
+            tick_label_options=self._mark_full_dirty,
+            legend_label_options=self._mark_full_dirty,
         )
 
         self.bind(
-            tick_color=self._trigger_color,
-            background_color=self._trigger_color,
-            border_color=self._trigger_color,
+            tick_color=self._mark_color_dirty,
+            background_color=self._mark_color_dirty,
+            border_color=self._mark_color_dirty,
         )
 
         self.bind(
-            legend=self._trigger_legend,
-            view_pos=self._trigger_legend,
-            view_size=self._trigger_legend,
-            pos=self._trigger_legend,
+            legend=self._mark_legend_dirty,
+            view_pos=self._mark_legend_dirty,
+            view_size=self._mark_legend_dirty,
+            pos=self._mark_legend_dirty,
         )
 
         # Initial draw
+        self._mark_full_dirty()
+
+    def _mark_full_dirty(self, *args: Any) -> None:
+        """Mark full redraw as needed."""
+        self._dirty_full = True
         self._trigger()
 
-    def add_widget(self, widget):
+    def _mark_size_dirty(self, *args: Any) -> None:
+        """Mark size update as needed."""
+        self._dirty_size = True
+        self._trigger_size()
+
+    def _mark_color_dirty(self, *args: Any) -> None:
+        """Mark color update as needed."""
+        self._dirty_colors = True
+        self._trigger_color()
+
+    def _mark_legend_dirty(self, *args: Any) -> None:
+        """Mark legend update as needed."""
+        self._dirty_legend = True
+        self._trigger_legend()
+
+    def _process_full_redraw(self, *args: Any) -> None:
+        """Process full redraw request."""
+        if self._dirty_full:
+            self._redraw_all()
+            self._dirty_full = False
+
+    def _process_size_update(self, *args: Any) -> None:
+        """Process size update request."""
+        if self._dirty_size:
+            self._redraw_size()
+            self._dirty_size = False
+
+    def _process_color_update(self, *args: Any) -> None:
+        """Process color update request."""
+        if self._dirty_colors:
+            self._update_colors()
+            self._dirty_colors = False
+
+    def _process_legend_update(self, *args: Any) -> None:
+        """Process legend update request."""
+        if self._dirty_legend:
+            self._update_legend()
+            self._dirty_legend = False
+
+    def add_widget(self, widget: Widget) -> None:
         """Add widget, handling special case for plot area."""
         if widget is self._plot_area:
             canvas = self.canvas
@@ -495,7 +567,7 @@ class Graph(Widget):
         if widget is self._plot_area:
             self.canvas = canvas
 
-    def remove_widget(self, widget):
+    def remove_widget(self, widget: Widget) -> None:
         """Remove widget, handling special case for plot area."""
         if widget is self._plot_area:
             canvas = self.canvas
@@ -504,14 +576,21 @@ class Graph(Widget):
         if widget is self._plot_area:
             self.canvas = canvas
 
-    def _get_ticks(self, major, minor, log, s_min, s_max):
+    def _get_ticks(
+        self,
+        major: Union[float, List[float], Tuple[float, ...]],
+        minor: Union[float, List[float], Tuple[float, ...]],
+        log: bool,
+        s_min: float,
+        s_max: float,
+    ) -> Tuple[List[float], List[float]]:
         """Calculate tick positions for major and minor ticks."""
         # Ensure major and minor are same type
         if isinstance(major, (list, tuple)) != isinstance(minor, (list, tuple)):
             minor = type(major)()
 
-        points_major = []
-        points_minor = []
+        points_major: List[float] = []
+        points_minor: List[float] = []
 
         if isinstance(major, (list, tuple)):
             # Use provided tick positions
@@ -564,10 +643,7 @@ class Graph(Widget):
 
                 # Calculate first tick position
                 start_dec = (
-                    ceil(
-                        (10 ** Decimal(s_min_log - s_min_low - 1))
-                        / Decimal(decade_dist)
-                    )
+                    ceil((10 ** (s_min_log - s_min_low - 1)) / decade_dist)
                     * decade_dist
                 )
                 count_min = 0 if not minor else floor(start_dec / decade_dist) % minor
@@ -628,7 +704,7 @@ class Graph(Widget):
             sorted(points_minor, reverse=s_min > s_max),
         )
 
-    def _update_labels(self):
+    def _update_labels(self) -> Tuple[float, float, float, float]:
         """Update position and content of axis labels and tick labels."""
         xlabel = self._xlabel
         ylabel = self._ylabel
@@ -672,14 +748,14 @@ class Graph(Widget):
 
         # Update Y-axis tick labels
         if len(ylabels) and ylabel_grid:
-            funcexp = exp10 if self.ylog else identity
-            funclog = log10 if self.ylog else identity
+            funcexp = lambda x: 10**x if self.ylog else lambda x: x
+            funclog = log10 if self.ylog else lambda x: x
 
             # Determine text generation function
-            if isinstance(self.y_grid_label, Callable):
+            if callable(self.y_grid_label):
                 get_text = lambda k: self.y_grid_label(funcexp(ypoints[k]))
             elif isinstance(self.y_grid_label, (tuple, list, str)):
-                get_text = self.y_grid_label.__getitem__
+                get_text = lambda k: self.y_grid_label[k]
             else:
                 get_text = lambda k: precision % funcexp(ypoints[k])
 
@@ -700,21 +776,31 @@ class Graph(Widget):
             y_start -= y1[1] / 2.0
             y1 = y1[0]
 
-            # Update all Y labels
+            # Update all Y labels efficiently
+            texts_to_update = []
             for k in range(len(ylabels)):
                 try:
-                    ylabels[k].text = get_text(k)
+                    text = get_text(k)
+                    texts_to_update.append((k, text))
                 except IndexError:
                     break
+
+            for k, text in texts_to_update:
+                ylabels[k].text = text
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
 
+            positions_to_update = []
             for k in range(len(ylabels)):
-                ylabels[k].pos = (
+                pos = (
                     int(x_next) - ylabels[k].width + y1,
                     int(y_start + (ypoints[k] - ymin_log) * ratio),
                 )
+                positions_to_update.append((k, pos))
+
+            for k, pos in positions_to_update:
+                ylabels[k].pos = pos
 
             # Check for overlap
             if len(ylabels) > 1 and ylabels[0].top > ylabels[1].y:
@@ -724,14 +810,14 @@ class Graph(Widget):
 
         # Update X-axis tick labels
         if len(xlabels) and xlabel_grid:
-            funcexp = exp10 if self.xlog else identity
-            funclog = log10 if self.xlog else identity
+            funcexp = lambda x: 10**x if self.xlog else lambda x: x
+            funclog = log10 if self.xlog else lambda x: x
 
             # Determine text generation function
-            if isinstance(self.x_grid_label, Callable):
+            if callable(self.x_grid_label):
                 get_text = lambda k: self.x_grid_label(funcexp(xpoints[k]))
             elif isinstance(self.x_grid_label, (tuple, list, str)):
-                get_text = self.x_grid_label.__getitem__
+                get_text = lambda k: self.x_grid_label[k]
             else:
                 get_text = lambda k: precision % funcexp(xpoints[k])
 
@@ -750,19 +836,26 @@ class Graph(Widget):
             right = -1
 
             # Position X labels and check for overlap
+            texts_and_positions = []
             for k in range(len(xlabels)):
                 try:
-                    xlabels[k].text = get_text(k)
+                    text = get_text(k)
+                    half_ts = 0  # Will be calculated during update
+                    texts_and_positions.append((k, text, half_ts))
                 except IndexError:
                     pass
 
+            # Update textures efficiently
+            for k, text, half_ts in texts_and_positions:
+                xlabels[k].text = text
                 xlabels[k].texture_update()
                 xlabels[k].size = xlabels[k].texture_size
                 half_ts = xlabels[k].texture_size[0] / 2.0
-                xlabels[k].pos = (
+                pos = (
                     int(x_next + (xpoints[k] - xmin_log) * ratio - half_ts),
                     int(y_next),
                 )
+                xlabels[k].pos = pos
 
                 if xlabels[k].x < right:
                     x_overlap = True
@@ -770,7 +863,7 @@ class Graph(Widget):
                 right = xlabels[k].right
 
             if not x_overlap:
-                y_next += padding + xlabels[0].texture_size[1]
+                y_next += padding + (xlabels[0].texture_size[1] if xlabels else 0)
 
         # Re-center axis labels
         if xlabel:
@@ -781,15 +874,15 @@ class Graph(Widget):
 
         # Hide overlapping labels
         if x_overlap:
-            for k in range(len(xlabels)):
-                xlabels[k].text = ""
+            for label in xlabels:
+                label.text = ""
         if y_overlap:
-            for k in range(len(ylabels)):
-                ylabels[k].text = ""
+            for label in ylabels:
+                label.text = ""
 
         return x_next - x, y_next - y, xextent - x, yextent - y
 
-    def _update_ticks(self, size):
+    def _update_ticks(self, size: Tuple[float, float, float, float]) -> None:
         """Update tick and grid line positions."""
         # Update border rectangle
         mesh = self._mesh_rect
@@ -842,87 +935,93 @@ class Graph(Widget):
         if ylog:
             ymin, ymax = log10(ymin), log10(ymax)
 
+        # Pre-calculate ratios for better performance
+        x_ratio = (size[2] - size[0]) / float(xmax - xmin) if xmax != xmin else 0
+        y_ratio = (size[3] - size[1]) / float(ymax - ymin) if ymax != ymin else 0
+
+        # Collect all vertex data
+        new_vertices = []
+
         # Draw major X ticks
         if len(xpoints):
-            top = size[3] if self.x_grid else metrics.dp(12) + size[1]
-            ratio = (size[2] - size[0]) / float(xmax - xmin)
-            for k in range(start, len(xpoints) + start):
-                x_pos = size[0] + (xpoints[k - start] - xmin) * ratio
-                vert[k * 8 : k * 8 + 8] = [x_pos, size[1], 0, 0, x_pos, top, 0, 0]
-            start += len(xpoints)
+            top = size[3] if self.x_grid else dp(12) + size[1]
+            for point in xpoints:
+                x_pos = size[0] + (point - xmin) * x_ratio
+                new_vertices.extend([x_pos, size[1], 0, 0, x_pos, top, 0, 0])
 
         # Draw minor X ticks
         if len(xpoints2):
-            top = metrics.dp(8) + size[1]
-            ratio = (size[2] - size[0]) / float(xmax - xmin)
-            for k in range(start, len(xpoints2) + start):
-                x_pos = size[0] + (xpoints2[k - start] - xmin) * ratio
-                vert[k * 8 : k * 8 + 8] = [x_pos, size[1], 0, 0, x_pos, top, 0, 0]
-            start += len(xpoints2)
+            top = dp(8) + size[1]
+            for point in xpoints2:
+                x_pos = size[0] + (point - xmin) * x_ratio
+                new_vertices.extend([x_pos, size[1], 0, 0, x_pos, top, 0, 0])
 
         # Draw major Y ticks
         if len(ypoints):
-            top = size[2] if self.y_grid else metrics.dp(12) + size[0]
-            ratio = (size[3] - size[1]) / float(ymax - ymin)
-            for k in range(start, len(ypoints) + start):
-                y_pos = size[1] + (ypoints[k - start] - ymin) * ratio
-                vert[k * 8 : k * 8 + 8] = [size[0], y_pos, 0, 0, top, y_pos, 0, 0]
-            start += len(ypoints)
+            top = size[2] if self.y_grid else dp(12) + size[0]
+            for point in ypoints:
+                y_pos = size[1] + (point - ymin) * y_ratio
+                new_vertices.extend([size[0], y_pos, 0, 0, top, y_pos, 0, 0])
 
         # Draw minor Y ticks
         if len(ypoints2):
-            top = metrics.dp(8) + size[0]
-            ratio = (size[3] - size[1]) / float(ymax - ymin)
-            for k in range(start, len(ypoints2) + start):
-                y_pos = size[1] + (ypoints2[k - start] - ymin) * ratio
-                vert[k * 8 : k * 8 + 8] = [size[0], y_pos, 0, 0, top, y_pos, 0, 0]
+            top = dp(8) + size[0]
+            for point in ypoints2:
+                y_pos = size[1] + (point - ymin) * y_ratio
+                new_vertices.extend([size[0], y_pos, 0, 0, top, y_pos, 0, 0])
 
-        mesh.vertices = vert
+        # Update mesh with all vertices at once
+        mesh.vertices = new_vertices
+        mesh.indices = list(range(len(new_vertices) // 4))
 
     # Axis management properties
     x_axis = ListProperty([None])
     y_axis = ListProperty([None])
 
-    def get_x_axis(self, axis=0):
+    def get_x_axis(self, axis: int = 0) -> Tuple[bool, float, float]:
         """Get X-axis parameters for specified axis index."""
         if axis == 0:
             return self.xlog, self.xmin, self.xmax
         info = self.x_axis[axis]
         return info["log"], info["min"], info["max"]
 
-    def get_y_axis(self, axis=0):
+    def get_y_axis(self, axis: int = 0) -> Tuple[bool, float, float]:
         """Get Y-axis parameters for specified axis index."""
         if axis == 0:
             return self.ylog, self.ymin, self.ymax
         info = self.y_axis[axis]
         return info["log"], info["min"], info["max"]
 
-    def add_x_axis(self, xmin, xmax, xlog=False):
+    def add_x_axis(
+        self, xmin: float, xmax: float, xlog: bool = False
+    ) -> Dict[str, Any]:
         """Add additional X-axis with specified parameters."""
         data = {"log": xlog, "min": xmin, "max": xmax}
         self.x_axis.append(data)
         return data
 
-    def add_y_axis(self, ymin, ymax, ylog=False):
+    def add_y_axis(
+        self, ymin: float, ymax: float, ylog: bool = False
+    ) -> Dict[str, Any]:
         """Add additional Y-axis with specified parameters."""
         data = {"log": ylog, "min": ymin, "max": ymax}
         self.y_axis.append(data)
         return data
 
-    def _update_plots(self, size):
+    def _update_plots(self, size: Tuple[float, float, float, float]) -> None:
         """Update all plots with current size and axis parameters."""
         for plot in self.plots:
             xlog, xmin, xmax = self.get_x_axis(plot.x_axis)
             ylog, ymin, ymax = self.get_y_axis(plot.y_axis)
-            plot._update(xlog, xmin, xmax, ylog, ymin, ymax, size)
+            plot.update(xlog, xmin, xmax, ylog, ymin, ymax, size)
 
-    def _update_colors(self, *args):
+    def _update_colors(self, *args: Any) -> None:
         """Update color properties of graph elements."""
         self._mesh_ticks_color.rgba = tuple(self.tick_color)
         self._background_color.rgba = tuple(self.background_color)
         self._mesh_rect_color.rgba = tuple(self.border_color)
 
-    def _redraw_all(self, *args):
+    def _redraw_all(self, *args: Any) -> None:
         """Perform complete redraw of graph including labels and ticks."""
         # Update axis labels and ticks
         xpoints_major, xpoints_minor = self._redraw_x(*args)
@@ -936,20 +1035,24 @@ class Graph(Widget):
                 for key, value in options.items():
                     setattr(child, key, value)
 
-        # Update mesh for ticks
-        mesh = self._mesh_ticks
+        # Pre-size mesh for ticks to avoid reallocations
         n_points = (
             len(xpoints_major)
             + len(xpoints_minor)
             + len(ypoints_major)
             + len(ypoints_minor)
         )
-        mesh.vertices = [0] * (n_points * 8)
-        mesh.indices = list(range(n_points * 2))
+
+        if (
+            hasattr(self._mesh_ticks, "vertices")
+            and len(self._mesh_ticks.vertices) != n_points * 8
+        ):
+            self._mesh_ticks.vertices = [0] * (n_points * 8)
+            self._mesh_ticks.indices = list(range(n_points * 2))
 
         self._redraw_size()
 
-    def _redraw_x(self, *args):
+    def _redraw_x(self, *args: Any) -> Tuple[List[float], List[float]]:
         """Redraw X-axis labels and calculate tick positions."""
         # Handle X-axis label
         if self.xlabel:
@@ -983,24 +1086,26 @@ class Graph(Widget):
         else:
             n_labels = len(xpoints_major)
 
-        # Remove excess labels
-        for k in range(n_labels, len(grids)):
-            self.remove_widget(grids[k])
-        del grids[n_labels:]
+        # Remove excess labels efficiently
+        if len(grids) > n_labels:
+            for i in range(n_labels, len(grids)):
+                self.remove_widget(grids[i])
+            del grids[n_labels:]
 
         # Add new labels as needed
         grid_len = len(grids)
-        grids.extend([None] * (n_labels - len(grids)))
-        options = self.label_options.copy()
-        options.update(**self.tick_label_options)
+        if len(grids) < n_labels:
+            grids.extend([None] * (n_labels - len(grids)))
+            options = self.label_options.copy()
+            options.update(**self.tick_label_options)
 
-        for k in range(grid_len, n_labels):
-            grids[k] = GraphRotatedLabel(angle=self.x_ticks_angle, **options)
-            self.add_widget(grids[k])
+            for k in range(grid_len, n_labels):
+                grids[k] = GraphRotatedLabel(angle=self.x_ticks_angle, **options)
+                self.add_widget(grids[k])
 
         return xpoints_major, xpoints_minor
 
-    def _redraw_y(self, *args):
+    def _redraw_y(self, *args: Any) -> Tuple[List[float], List[float]]:
         """Redraw Y-axis labels and calculate tick positions."""
         # Handle Y-axis label
         if self.ylabel:
@@ -1034,24 +1139,26 @@ class Graph(Widget):
         else:
             n_labels = len(ypoints_major)
 
-        # Remove excess labels
-        for k in range(n_labels, len(grids)):
-            self.remove_widget(grids[k])
-        del grids[n_labels:]
+        # Remove excess labels efficiently
+        if len(grids) > n_labels:
+            for i in range(n_labels, len(grids)):
+                self.remove_widget(grids[i])
+            del grids[n_labels:]
 
         # Add new labels as needed
         grid_len = len(grids)
-        grids.extend([None] * (n_labels - len(grids)))
-        options = self.label_options.copy()
-        options.update(**self.tick_label_options)
+        if len(grids) < n_labels:
+            grids.extend([None] * (n_labels - len(grids)))
+            options = self.label_options.copy()
+            options.update(**self.tick_label_options)
 
-        for k in range(grid_len, n_labels):
-            grids[k] = Label(**options)
-            self.add_widget(grids[k])
+            for k in range(grid_len, n_labels):
+                grids[k] = Label(**options)
+                self.add_widget(grids[k])
 
         return ypoints_major, ypoints_minor
 
-    def _redraw_size(self, *args):
+    def _redraw_size(self, *args: Any) -> None:
         """Update graph layout and plot positions based on current size."""
         self._clear_buffer()
         size = self._update_labels()
@@ -1060,11 +1167,14 @@ class Graph(Widget):
         self.view_pos = self._plot_area.pos = (size[0], size[1])
         self.view_size = self._plot_area.size = (size[2] - size[0], size[3] - size[1])
 
-        # Update FBO size
+        # Update FBO size efficiently
         if self.size[0] and self.size[1]:
-            self._fbo.size = self.size
+            target_size = self.size
         else:
-            self._fbo.size = 1, 1  # Prevent GL errors
+            target_size = (1, 1)  # Prevent GL errors
+
+        if self._fbo.size != target_size:
+            self._fbo.size = target_size
 
         # Update FBO rectangle
         self._fbo_rect.texture = self._fbo.texture
@@ -1076,7 +1186,7 @@ class Graph(Widget):
         self._update_ticks(size)
         self._update_plots(size)
 
-    def _update_legend(self, *_):
+    def _update_legend(self, *_: Any) -> None:
         """Update legend position and marker drawings."""
         if not self.legend:
             return
@@ -1111,21 +1221,22 @@ class Graph(Widget):
 
         # Update legend markers
         for i, plot in enumerate(self._legend_plots):
-            label = self.legend.children[-(i + 1)]
-            drawing_center = (
-                label.x - self.legend.spacing - self.legend.marker_width / 2,
-                label.center_y,
-            )
-            plot.draw_legend(drawing_center, self.legend.marker_size)
+            if i < len(self.legend.children):
+                label = self.legend.children[-(i + 1)]
+                drawing_center = (
+                    label.x - self.legend.spacing - self.legend.marker_width / 2,
+                    label.center_y,
+                )
+                plot.draw_legend(drawing_center, self.legend.marker_size)
 
-    def _clear_buffer(self, *largs):
+    def _clear_buffer(self, *largs: Any) -> None:
         """Clear the FBO buffer."""
         fbo = self._fbo
         fbo.bind()
         fbo.clear_buffer()
         fbo.release()
 
-    def add_plot(self, plot):
+    def add_plot(self, plot: Any) -> None:
         """Add a new plot to this graph.
 
         :Parameters:
@@ -1147,7 +1258,7 @@ class Graph(Widget):
         plot.bind(on_clear_plot=self._clear_buffer)
         self.plots.append(plot)
 
-    def remove_plot(self, plot):
+    def remove_plot(self, plot: Any) -> None:
         """Remove a plot from this graph.
 
         :Parameters:
@@ -1171,7 +1282,7 @@ class Graph(Widget):
         self.plots.remove(plot)
         self._clear_buffer()
 
-    def collide_plot(self, x, y):
+    def collide_plot(self, x: float, y: float) -> bool:
         """Determine if the given coordinates fall inside the plot area.
 
         Use `x, y = self.to_widget(x, y, relative=True)` to first convert into
@@ -1188,7 +1299,7 @@ class Graph(Widget):
             and 0 <= adj_y <= self._plot_area.size[1]
         )
 
-    def to_data(self, x, y):
+    def to_data(self, x: float, y: float) -> List[float]:
         """Convert widget coords to data coords.
 
         Use `x, y = self.to_widget(x, y, relative=True)` to first convert into
@@ -1468,73 +1579,62 @@ class Graph(Widget):
 
 class GraphAA(Graph):
     """
-    Graph with AA:
-    - fxaa (default): FXAA (default): A screen-space, edge-only AA post-pass
-     applied to the Graph’s FBO. It’s GLES2-safe (no derivatives), tunable
-     via fxaa_threshold, fxaa_strength, extra_blur, and works on Android
-     and desktop.
+    Graph with anti-aliasing support.
+
+    Supports two anti-aliasing modes:
+    - fxaa (default): Fast Approximate Anti-Aliasing - a screen-space, edge-only
+      AA post-pass applied to the Graph's FBO. It's GLES2-safe (no derivatives),
+      tunable via fxaa_threshold, fxaa_strength, extra_blur, and works on Android
+      and desktop.
     - ssaa: True 2× supersampling. The graph renders into a 2× FBO and
-    then downscales with a 4-tap box filter in approximate linear color
-    (toLinear/toSRGB). It’s also GLES2-safe. Performance cost is higher but
-    quality is better, especially for very thin lines.
+      then downscales with a 4-tap box filter in approximate linear color
+      (toLinear/toSRGB). It's also GLES2-safe. Performance cost is higher but
+      quality is better, especially for very thin lines.
 
     Properties persist and can be changed at runtime.
     """
 
     FXAA_FS = """
-    // glsl
     $HEADER$
-    #ifdef GL_ES
-    precision mediump float;
-    #endif
+    uniform vec2 inv_tex_size;   // 1.0 / texture size
+    uniform float fxaa_threshold; // edge sensitivity
+    uniform float fxaa_strength;  // smoothing strength
 
-    uniform vec2 inv_tex_size;
-    uniform float fxaa_threshold;  // e.g. 0.07
-    uniform float fxaa_strength;   // 0..1
-    uniform float extra_blur;      // 0..1
-
-    vec4 tex4(vec2 uv){ return texture2D(texture0, uv); }
+    vec4 fetch4(vec2 uv){ return texture2D(texture0, uv); }
+    vec3 fetch(vec2 uv){ return fetch4(uv).rgb; }
     float luma(vec3 c){ return dot(c, vec3(0.299, 0.587, 0.114)); }
 
-    void main(){
-        vec2 uv = tex_coord0, px = inv_tex_size;
-        vec4 c4 = tex4(uv);
-        vec3 c = c4.rgb; float a = c4.a;
+    void main(void){
+        vec2 uv = tex_coord0;
+        vec2 px = inv_tex_size;
 
-        float lN = luma(tex4(uv + vec2(0.0,-px.y)).rgb);
-        float lS = luma(tex4(uv + vec2(0.0, px.y)).rgb);
-        float lE = luma(tex4(uv + vec2( px.x,0.0)).rgb);
-        float lW = luma(tex4(uv + vec2(-px.x,0.0)).rgb);
+        vec4 sM4 = fetch4(uv);
+        vec3 cM = sM4.rgb;
+        float aM = sM4.a;
 
-        vec2 g = vec2(lE - lW, lS - lN);
-        float mag = max(abs(g.x), abs(g.y));
-        if (mag < fxaa_threshold){
-            gl_FragColor = vec4(c, a) * frag_color;
+        float lM = luma(cM);
+        float lN = luma(fetch(uv + vec2( 0.0, -px.y)));
+        float lS = luma(fetch(uv + vec2( 0.0,  px.y)));
+        float lE = luma(fetch(uv + vec2( px.x,  0.0)));
+        float lW = luma(fetch(uv + vec2(-px.x,  0.0)));
+
+        float lMax = max(max(lN, lS), max(lE, lW));
+        float lMin = min(min(lN, lS), min(lE, lW));
+        float contrast = lMax - lMin;
+
+        if (contrast < fxaa_threshold){
+            gl_FragColor = vec4(cM, aM) * frag_color;
             return;
         }
 
-        vec2 n = normalize(g + 1e-6);
-        vec2 stepUV = vec2(px.x*n.x, px.y*n.y);
+        vec3 cH = (fetch(uv + vec2(px.x, 0.0)) + fetch(uv + vec2(-px.x, 0.0))) * 0.5;
+        vec3 cV = (fetch(uv + vec2(0.0, px.y)) + fetch(uv + vec2(0.0, -px.y))) * 0.5;
+        vec3 blur = (cH + cV) * 0.5;
 
-        vec3 s1 = tex4(uv + stepUV*0.5).rgb;
-        vec3 s2 = tex4(uv - stepUV*0.5).rgb;
-        vec3 s3 = tex4(uv + stepUV*1.5).rgb;
-        vec3 s4 = tex4(uv - stepUV*1.5).rgb;
+        float w = clamp(contrast * (fxaa_strength * 8.0), 0.0, 1.0);
+        vec3 outc = mix(cM, blur, w);
 
-        vec3 tent = c*0.4 + (s1+s2)*0.15 + (s3+s4)*0.15;
-        vec3 minc = min(min(c,s1), min(s2, min(s3,s4)));
-        vec3 maxc = max(max(c,s1), max(s2, max(s3,s4)));
-        vec3 edgeBlur = mix(clamp(tent,minc,maxc),
-                            clamp((tex4(uv+vec2(px.x*0.5,0)).rgb
-                                + tex4(uv-vec2(px.x*0.5,0)).rgb
-                                + tex4(uv+vec2(0,px.y*0.5)).rgb
-                                + tex4(uv-vec2(0,px.y*0.5)).rgb) * 0.25,
-                                minc,maxc),
-                            clamp(extra_blur,0.0,1.0));
-
-        float w = fxaa_strength * smoothstep(fxaa_threshold, fxaa_threshold*4.0, mag);
-        vec3 outc = mix(c, edgeBlur, w);
-        gl_FragColor = vec4(outc, a) * frag_color;
+        gl_FragColor = vec4(outc, aM) * frag_color;
     }
     """
 
@@ -1564,17 +1664,47 @@ class GraphAA(Graph):
     }
     """
 
-    # Mode: 'fxaa' (default) or 'ssaa'
     aa_mode = OptionProperty("fxaa", options=("fxaa", "ssaa"))
-    # SSAA scale (only 1 or 2 are meaningful here; 2 = 2x FBO)
+    """Anti-aliasing mode. Can be either 'fxaa' or 'ssaa'.
+
+    :data:`aa_mode` is an :class:`~kivy.properties.OptionProperty`,
+    defaults to 'fxaa'.
+    """
+
     ssaa_scale = NumericProperty(2)
+    """SSAA scale factor. Only 1 or 2 are meaningful here; 2 = 2x FBO.
 
-    # FXAA params
+    :data:`ssaa_scale` is an :class:`~kivy.properties.NumericProperty`,
+    defaults to 2.
+    """
+
     fxaa_strength = NumericProperty(0.6)
-    fxaa_threshold = NumericProperty(0.07)
-    extra_blur = NumericProperty(0.3)
+    """FXAA smoothing strength parameter.
 
-    def __init__(self, **kwargs):
+    :data:`fxaa_strength` is an :class:`~kivy.properties.NumericProperty`,
+    defaults to 0.6.
+    """
+
+    fxaa_threshold = NumericProperty(0.07)
+    """FXAA edge sensitivity threshold.
+
+    :data:`fxaa_threshold` is an :class:`~kivy.properties.NumericProperty`,
+    defaults to 0.07.
+    """
+
+    extra_blur = NumericProperty(0.3)
+    """FXAA extra blur parameter.
+
+    :data:`extra_blur` is an :class:`~kivy.properties.NumericProperty`,
+    defaults to 0.3.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        """
+        Initialize GraphAA instance.
+
+        :param kwargs: Additional keyword arguments passed to parent class
+        """
         # Allow overriding via kwargs
         self.aa_mode = kwargs.pop("aa_mode", self.aa_mode)
         self.ssaa_scale = float(kwargs.pop("ssaa_scale", self.ssaa_scale))
@@ -1603,33 +1733,68 @@ class GraphAA(Graph):
 
         # Bind uniforms to properties (persist + live updates)
         self.bind(
-            fxaa_strength=lambda _, v: self._set_uniform("fxaa_strength", float(v))
+            fxaa_strength=self._on_fxaa_strength_change,
+            fxaa_threshold=self._on_fxaa_threshold_change,
+            extra_blur=self._on_extra_blur_change,
+            aa_mode=self._on_aa_changed,
+            ssaa_scale=self._on_ssaa_scale_change,
         )
-        self.bind(
-            fxaa_threshold=lambda _, v: self._set_uniform("fxaa_threshold", float(v))
-        )
-        self.bind(extra_blur=lambda _, v: self._set_uniform("extra_blur", float(v)))
-        self.bind(aa_mode=self._on_aa_changed)
-        self.bind(ssaa_scale=lambda _, v: self._on_aa_changed(None, self.aa_mode))
 
         self.canvas.add(self._post_rc)
 
         self.bind(size=self._on_resize_or_move, pos=self._on_resize_or_move)
         Clock.schedule_once(self._post_init, 0)
 
-    def _post_init(self, *args):
-        # Ensure FBO and uniforms are correct after construction
+    def _on_fxaa_strength_change(self, _: Any, value: float) -> None:
+        """
+        Handle fxaa_strength property change.
+
+        :param _: Instance reference (unused)
+        :param value: New fxaa_strength value
+        """
+        self._set_uniform("fxaa_strength", float(value))
+
+    def _on_fxaa_threshold_change(self, _: Any, value: float) -> None:
+        """
+        Handle fxaa_threshold property change.
+
+        :param _: Instance reference (unused)
+        :param value: New fxaa_threshold value
+        """
+        self._set_uniform("fxaa_threshold", float(value))
+
+    def _on_extra_blur_change(self, _: Any, value: float) -> None:
+        """
+        Handle extra_blur property change.
+
+        :param _: Instance reference (unused)
+        :param value: New extra_blur value
+        """
+        self._set_uniform("extra_blur", float(value))
+
+    def _on_ssaa_scale_change(self, _: Any, __: float) -> None:
+        """
+        Handle ssaa_scale property change.
+
+        :param _: Instance reference (unused)
+        :param __: New ssaa_scale value (unused)
+        """
+        self._on_aa_changed(None, self.aa_mode)
+
+    def _post_init(self, *args: Any) -> None:
+        """Ensure FBO and uniforms are correct after construction."""
         self._apply_ssaa_target()
         self._update_post_rect()
 
-    def _build_post_context(self):
+    def _build_post_context(self) -> None:
+        """Build the post-processing render context."""
         fs_src = self.SSAA2_FS if self.aa_mode == "ssaa" else self.FXAA_FS
-        self._post_rc = RenderContext(
+        self._post_rc: RenderContext = RenderContext(
             fs=fs_src, use_parent_modelview=True, use_parent_projection=True
         )
         with self._post_rc:
             Color(1, 1, 1, 1)
-            self._post_rect = Rectangle(
+            self._post_rect: Rectangle = Rectangle(
                 size=self.size, pos=self.pos, texture=self._fbo.texture
             )
 
@@ -1639,10 +1804,15 @@ class GraphAA(Graph):
         self._set_uniform("extra_blur", float(self.extra_blur))
         self._set_uniform("ssaa_scale", float(self.ssaa_scale))
 
-    def _on_aa_changed(self, *_):
-        # Rebuild post context on mode/scale change
+    def _on_aa_changed(self, _: Any, __: str) -> None:
+        """
+        Rebuild post context on mode/scale change.
+
+        :param _: Instance reference (unused)
+        :param __: New aa_mode value (unused)
+        """
         try:
-            if self._post_rc in self.canvas.children:
+            if hasattr(self, "_post_rc") and self._post_rc in self.canvas.children:
                 self.canvas.remove(self._post_rc)
         except Exception:
             pass
@@ -1651,7 +1821,7 @@ class GraphAA(Graph):
         self._apply_ssaa_target()
         self._update_post_rect()
 
-    def _apply_ssaa_target(self):
+    def _apply_ssaa_target(self) -> None:
         """Resize the internal FBO when ssaa is active; else adjust filters.
         Guarded to avoid recursion on resize/redraw signals."""
         if self._ssaa_resizing:
@@ -1676,10 +1846,11 @@ class GraphAA(Graph):
                     self._fbo.texture.min_filter = "linear"
                     self._fbo.texture.mag_filter = "linear"
         except Exception as e:
-            Logger.warning(f"GraphFXAA: SSAA FBO apply failed: {e}")
+            Logger.warning(f"GraphAA: SSAA FBO apply failed: {e}")
             self._ssaa_resizing = False
 
-    def _finish_ssaa_resize(self, *args):
+    def _finish_ssaa_resize(self, *args: Any) -> None:
+        """Finish SSAA resize operation."""
         self._ssaa_resizing = False
         # update uniforms/rect with new hi-res texture size
         self._update_post_rect()
@@ -1689,27 +1860,30 @@ class GraphAA(Graph):
         except Exception:
             pass
 
-    def _update_clear_color(self, *args):
+    def _update_clear_color(self, *args: Any) -> None:
+        """Update FBO clear color."""
         try:
             self._fbo.clear_color = tuple(self.background_color)
         except Exception:
             pass
 
-    # Update post rect every redraw
-    def _redraw_all(self, *args):
+    def _redraw_all(self, *args: Any) -> None:
+        """Override to include post-processing update."""
         super()._redraw_all(*args)
         self._update_post_rect()
 
-    def _redraw_size(self, *args):
+    def _redraw_size(self, *args: Any) -> None:
+        """Override to include post-processing update."""
         super()._redraw_size(*args)
         self._update_post_rect()
 
-    def _on_resize_or_move(self, *args):
-        # Called on widget size/pos changes
+    def _on_resize_or_move(self, *args: Any) -> None:
+        """Called on widget size/pos changes."""
         self._apply_ssaa_target()
         self._update_post_rect()
 
-    def _update_post_rect(self, *args):
+    def _update_post_rect(self, *args: Any) -> None:
+        """Update post-processing rectangle properties."""
         try:
             tex = self._fbo.texture
             self._post_rect.texture = tex
@@ -1722,18 +1896,34 @@ class GraphAA(Graph):
             # Keep ssaa_scale uniform up to date (used only in SSAA FS)
             self._post_rc["ssaa_scale"] = float(self.ssaa_scale)
         except Exception as e:
-            Logger.warning(f"GraphFXAA: post rect update failed: {e}")
+            Logger.warning(f"GraphAA: post rect update failed: {e}")
 
-    def _set_uniform(self, name, value):
+    def _set_uniform(self, name: str, value: float) -> None:
+        """
+        Set shader uniform value safely.
+
+        :param name: Uniform name
+        :param value: Uniform value
+        """
         try:
-            self._post_rc[name] = value
+            if hasattr(self, "_post_rc"):
+                self._post_rc[name] = value
         except Exception as e:
-            Logger.warning(f"GraphFXAA: failed to set uniform {name}: {e}")
+            Logger.warning(f"GraphAA: failed to set uniform {name}: {e}")
 
-    # Backward-compatible API
     def set_fxaa(
-        self, threshold: float = None, strength: float = None, extra_blur: float = None
-    ):
+        self,
+        threshold: Optional[float] = None,
+        strength: Optional[float] = None,
+        extra_blur: Optional[float] = None,
+    ) -> None:
+        """
+        Set FXAA parameters.
+
+        :param threshold: FXAA edge sensitivity threshold
+        :param strength: FXAA smoothing strength
+        :param extra_blur: FXAA extra blur parameter
+        """
         if threshold is not None:
             self.fxaa_threshold = float(threshold)
         if strength is not None:
@@ -1743,14 +1933,14 @@ class GraphAA(Graph):
 
 
 class Plot(EventDispatcher):
-    """Plot class, see module documentation for more information.
+    """Optimized Plot class for real-time applications.
 
     :Events:
         `on_clear_plot`
             Fired before a plot updates the display and lets the fbo know that
             it should clear the old drawings.
 
-    ..versionadded:: 0.4
+    .. versionadded:: 0.4
     """
 
     __events__ = ("on_clear_plot",)
@@ -1788,49 +1978,128 @@ class Plot(EventDispatcher):
 
     def __init__(self, **kwargs):
         super(Plot, self).__init__(**kwargs)
-        self.ask_draw = Clock.create_trigger(self.draw)
-        self.bind(params=self.ask_draw, points=self.ask_draw)
+        self._dirty = False
+        self._transform_cache_valid = False
+        self._x_px_func: Optional[Callable] = None
+        self._y_px_func: Optional[Callable] = None
+        self._params_hash: int = 0
+
+        self.ask_draw = Clock.create_trigger(self._delayed_draw, -1)
+        self.bind(params=self._mark_dirty, points=self._mark_dirty)
         self._drawings = self.create_drawings()
 
-    def funcx(self):
+    def _mark_dirty(self, *args: Any) -> None:
+        """Mark the plot as dirty and schedule a redraw."""
+        self._dirty = True
+        self.ask_draw()
+
+    def _delayed_draw(self, *largs: Any) -> None:
+        """Delayed draw execution to prevent multiple rapid redraws."""
+        if self._dirty:
+            self.draw()
+
+    def _compute_params_hash(self) -> int:
+        """Compute hash of current parameters to detect changes."""
+        p = self.params
+        return hash(
+            (
+                p["xlog"],
+                p["xmin"],
+                p["xmax"],
+                p["ylog"],
+                p["ymin"],
+                p["ymax"],
+                tuple(p["size"]),
+            )
+        )
+
+    def _update_transform_cache(self) -> None:
+        """Cache transformation functions for better performance."""
+        current_hash = self._compute_params_hash()
+        if current_hash == self._params_hash and self._transform_cache_valid:
+            return
+
+        self._params_hash = current_hash
+        self._transform_cache_valid = True
+
+        # Precompute transformation functions
+        if self.params["xlog"]:
+
+            def funcx(x: float) -> float:
+                return log10(x) if x > 0 else 0
+
+        else:
+            funcx = lambda x: x
+
+        if self.params["ylog"]:
+
+            def funcy(y: float) -> float:
+                return log10(y) if y > 0 else 0
+
+        else:
+            funcy = lambda y: y
+
+        params = self.params
+        size = params["size"]
+
+        # Precalculate constants
+        try:
+            xmin_trans = funcx(params["xmin"])
+            xmax_trans = funcx(params["xmax"])
+            xrange = float(xmax_trans - xmin_trans)
+            self._ratiox = (size[2] - size[0]) / xrange if xrange != 0 else 0
+            self._xmin_base = xmin_trans
+            self._x_offset = size[0]
+
+            ymin_trans = funcy(params["ymin"])
+            ymax_trans = funcy(params["ymax"])
+            yrange = float(ymax_trans - ymin_trans)
+            self._ratioy = (size[3] - size[1]) / yrange if yrange != 0 else 0
+            self._ymin_base = ymin_trans
+            self._y_offset = size[1]
+
+            # Create optimized transform functions
+            self._x_px_func = (
+                lambda x: (funcx(x) - self._xmin_base) * self._ratiox + self._x_offset
+            )
+            self._y_px_func = (
+                lambda y: (funcy(y) - self._ymin_base) * self._ratioy + self._y_offset
+            )
+        except Exception:
+            self._x_px_func = lambda x: x
+            self._y_px_func = lambda y: y
+
+    def funcx(self) -> Callable[[float], float]:
         """Return a function that converts or not the X value according to plot parameters."""
-        return log10 if self.params["xlog"] else lambda x: x
+        self._update_transform_cache()
+        if self.params["xlog"]:
+            return lambda x: log10(x) if x > 0 else 0
+        return lambda x: x
 
-    def funcy(self):
+    def funcy(self) -> Callable[[float], float]:
         """Return a function that converts or not the Y value according to plot parameters."""
-        return log10 if self.params["ylog"] else lambda y: y
+        self._update_transform_cache()
+        if self.params["ylog"]:
+            return lambda y: log10(y) if y > 0 else 0
+        return lambda y: y
 
-    def x_px(self):
+    def x_px(self) -> Callable[[float], float]:
         """Return a function that converts the X value of the graph to the
         pixel coordinate on the plot, according to the plot settings and axis
         settings. It's relative to the graph pos.
         """
-        funcx = self.funcx()
-        params = self.params
-        size = params["size"]
-        xmin = funcx(params["xmin"])
-        xmax = funcx(params["xmax"])
-        xrange = float(xmax - xmin)
-        ratiox = (size[2] - size[0]) / xrange if xrange else 0
+        self._update_transform_cache()
+        return self._x_px_func if self._x_px_func is not None else lambda x: x
 
-        return lambda x: (funcx(x) - xmin) * ratiox + size[0]
-
-    def y_px(self):
+    def y_px(self) -> Callable[[float], float]:
         """Return a function that converts the Y value of the graph to the
         pixel coordinate on the plot, according to the plot settings and axis
         settings. The returned value is relative to the graph pos.
         """
-        funcy = self.funcy()
-        params = self.params
-        size = params["size"]
-        ymin = funcy(params["ymin"])
-        ymax = funcy(params["ymax"])
-        yrange = float(ymax - ymin)
-        ratioy = (size[3] - size[1]) / yrange if yrange else 0
+        self._update_transform_cache()
+        return self._y_px_func if self._y_px_func is not None else lambda y: y
 
-        return lambda y: (funcy(y) - ymin) * ratioy + size[1]
-
-    def unproject(self, x, y):
+    def unproject(self, x: float, y: float) -> Tuple[float, float]:
         """Return a function that unprojects a pixel to a X/Y value on the plot
         (works only for linear, not log yet). `x`, `y`, is relative to the
         graph pos, so the graph's pos needs to be subtracted from x, y before
@@ -1851,7 +2120,7 @@ class Plot(EventDispatcher):
         y0 = (y - size[1]) / ratioy + ymin if ratioy else ymin
         return x0, y0
 
-    def get_px_bounds(self):
+    def get_px_bounds(self) -> Dict[str, float]:
         """Returns a dict containing the pixels bounds from the plot parameters.
         The returned values are relative to the graph pos.
         """
@@ -1865,7 +2134,16 @@ class Plot(EventDispatcher):
             "ymax": y_px(params["ymax"]),
         }
 
-    def update(self, xlog, xmin, xmax, ylog, ymin, ymax, size):
+    def update(
+        self,
+        xlog: bool,
+        xmin: float,
+        xmax: float,
+        ylog: bool,
+        ymin: float,
+        ymax: float,
+        size: Tuple[float, float, float, float],
+    ) -> None:
         """Called by graph whenever any of the parameters change. The plot should be recalculated then.
         log, min, max indicate the axis settings.
         size a 4-tuple describing the bounding box in which we can draw
@@ -1884,14 +2162,14 @@ class Plot(EventDispatcher):
             }
         )
 
-    def get_group(self):
+    def get_group(self) -> str:
         """Returns a string which is unique and is the group name given to all
         the instructions returned by _get_drawings. Graph uses this to remove
         these instructions when needed.
         """
         return ""
 
-    def get_drawings(self):
+    def get_drawings(self) -> List[Any]:
         """Returns a list of canvas instructions that will be added to the
         graph's canvas.
         """
@@ -1899,39 +2177,68 @@ class Plot(EventDispatcher):
             return self._drawings
         return []
 
-    def create_drawings(self):
+    def create_drawings(self) -> List[Any]:
         """Called once to create all the canvas instructions needed for the plot."""
-        pass
+        self._color_instruction = Color(*self.color)
+        self._mesh_instruction = Mesh(mode="line_strip")
+        return [self._color_instruction, self._mesh_instruction]
 
-    def create_legend_drawings(self):
+    def create_legend_drawings(self) -> List[Any]:
         """Called when a legend is added containing this plot. Return drawing instructions."""
         return []
 
-    def draw(self, *largs):
+    def draw(self, *largs: Any) -> None:
         """Draw the plot according to the params. It dispatches on_clear_plot
         so derived classes should call super before updating.
         """
         self.dispatch("on_clear_plot")
+        self._dirty = False
 
-    def draw_legend(self, center, maximum_size):
+        if not self.points:
+            if hasattr(self, "_mesh_instruction"):
+                self._mesh_instruction.vertices = []
+            return
+
+        # Update color if needed
+        if hasattr(self, "_color_instruction"):
+            self._color_instruction.rgba = self.color
+
+        # Transform points efficiently
+        x_transform = self.x_px()
+        y_transform = self.y_px()
+
+        vertices = []
+        append = vertices.extend  # Faster than repeated calls to extend
+
+        for x, y in self.points:
+            try:
+                px = x_transform(x)
+                py = y_transform(y)
+                append([px, py, 0, 0])  # [x, y, u, v] - u,v not used
+            except (ValueError, ZeroDivisionError):
+                continue
+
+        # Set vertices once
+        if hasattr(self, "_mesh_instruction"):
+            self._mesh_instruction.vertices = vertices
+            self._mesh_instruction.indices = list(range(len(vertices) // 4))
+
+    def draw_legend(
+        self, center: Tuple[float, float], maximum_size: Tuple[float, float]
+    ) -> None:
         """Draw the legend representation."""
         pass
 
-    def iterate_points(self):
+    def iterate_points(self) -> Iterator[Tuple[float, float]]:
         """Iterate on all the points adjusted to the graph settings."""
         x_px = self.x_px()
         y_px = self.y_px()
         for x, y in self.points:
             yield x_px(x), y_px(y)
 
-    def on_clear_plot(self, *largs):
+    def on_clear_plot(self, *largs: Any) -> None:
         """Event handler for plot clearing."""
         pass
-
-    # Compatibility layer
-    _update = update
-    _get_drawings = get_drawings
-    _params = params
 
 
 class MeshLinePlot(Plot):
@@ -2309,31 +2616,30 @@ class SmoothLinePlot(Plot):
 
 class OptimizedSmoothLinePlot(Plot):
     """
-    Real-time line plot:
-    - Android: GLES2-safe AA shader (no derivatives).
-    - Desktop: adaptive AA shader.
-    - Flicker-free (clears only when params change).
-    - Optional decimation (default off to avoid shifts).
+    Efficient real-time line plot with platform-specific antialiasing:
+    - Android: GLES2-compatible shader without derivatives
+    - Desktop: Adaptive antialiasing using derivatives when available
+    - Flicker-free rendering (clears only when parameters change)
+    - Configurable point decimation (disabled by default)
     """
 
-    # Performance toggles
+    # Performance settings
     max_points = NumericProperty(2000)
     cleanup_interval = NumericProperty(30.0)
     auto_cleanup = BooleanProperty(True)
-    decimate = BooleanProperty(True)  # default off to avoid any shift surprises
+    decimate = BooleanProperty(False)  # Disabled by default to prevent visual shifts
     preserve_extrema = BooleanProperty(True)
 
-    # Visuals
+    # Visual properties
     line_width = NumericProperty(10.0)
     enable_antialiasing = BooleanProperty(True)
 
-    # Shared AA texture cache
+    # Shared texture resources
     _texture_cache: Optional[Texture] = None
     _texture_refs: int = 0
 
-    # AA Shader
+    # Antialiasing fragment shader supporting multiple platforms
     AA_FS_DERIVATIVES = """
-    // GLSL
     $HEADER$
     #ifdef GL_ES
     precision mediump float;
@@ -2345,11 +2651,9 @@ class OptimizedSmoothLinePlot(Plot):
         float t = texture2D(texture0, tex_coord0).r;
 
     #ifdef GL_OES_standard_derivatives
-        // Only if the driver allows derivatives without enable
         float w = fwidth(t) * edge_scale;
         float a = smoothstep(0.5 - w, 0.5 + w, t);
     #else
-        // Fallback: fixed-width smoothing, no derivatives used
         float a = smoothstep(0.0, edge_scale, t);
     #endif
 
@@ -2359,84 +2663,83 @@ class OptimizedSmoothLinePlot(Plot):
 
     @classmethod
     def _get_shared_texture(cls) -> Optional[Texture]:
+        """Create/retrieve shared antialiasing texture."""
         if cls._texture_cache is None:
             try:
                 size = 128
                 tex = Texture.create(size=(1, size), colorfmt="rgb")
-                import array
 
-                # symmetric ramp 0..255..0 (full peak at 255)
+                # Generate symmetric ramp: 0..255..0
                 half = size // 2
-                up = [int(round(255.0 * i / half)) for i in range(half + 1)]  # 0..255
-                ramp = up + up[-2::-1]  # mirror without duplicating peak
-                rgb = []
-                for v in ramp[:size]:  # ensure exact length
-                    rgb.extend((v, v, v))
-                buf = array.array("B", rgb).tobytes()
-                tex.blit_buffer(buf, colorfmt="rgb")
+                up = [round(255.0 * i / half) for i in range(half + 1)]
+                ramp = up + up[-2::-1]
+
+                # Convert to RGB bytes
+                rgb = [v for v in ramp[:size] for _ in range(3)]
+                tex.blit_buffer(bytes(rgb), colorfmt="rgb")
+
+                # Configure texture parameters
                 tex.wrap = "clamp_to_edge"
                 tex.min_filter = "linear"
                 tex.mag_filter = "linear"
 
                 cls._texture_cache = tex
-                Logger.debug(
-                    "OptimizedSmoothLinePlot: Created shared AA ramp texture (1x128)"
-                )
+                Logger.debug("Created shared AA ramp texture (1x128)")
             except Exception as e:
-                Logger.warning(
-                    f"OptimizedSmoothLinePlot: AA texture creation failed: {e}"
-                )
+                Logger.warning(f"AA texture creation failed: {e}")
                 cls._texture_cache = None
+
         if cls._texture_cache:
             cls._texture_refs += 1
         return cls._texture_cache
 
     @classmethod
     def _release_shared_texture(cls):
+        """Release shared texture reference."""
         cls._texture_refs = max(0, cls._texture_refs - 1)
         if cls._texture_refs == 0:
-            Logger.debug("OptimizedSmoothLinePlot: All shared AA texture refs released")
+            Logger.debug("All shared AA texture refs released")
 
     def __init__(self, **kwargs):
-        # Graphics
+        # Graphics components
         self._grc: Optional[RenderContext] = None
         self._gcolor: Optional[Color] = None
         self._gline: Optional[Line] = None
         self._texture: Optional[Texture] = None
 
-        # Buffers/state
+        # Data buffers
         maxlen = int(kwargs.get("max_points", self.max_points))
         self._ring: deque = deque(maxlen=maxlen)
         self._flat_points: List[float] = [0.0] * (2 * maxlen)
+
+        # State tracking
         self._last_params_sig: Optional[Tuple] = None
         self._last_ring_len: int = 0
         self._last_ring_tail: Optional[Tuple[float, float]] = None
         self._is_drawing: bool = False
         self._draw_count: int = 0
         self._last_cleanup_time: float = 0.0
-
-        # Clear control (avoid flicker)
-        self._needs_clear: bool = False  # only clear when params change
+        self._needs_clear: bool = False
 
         super().__init__(**kwargs)
-
         self._drawings = self.create_drawings()
 
         if self.auto_cleanup:
             Clock.schedule_interval(self._periodic_cleanup, self.cleanup_interval)
 
     def create_drawings(self) -> List:
+        """Initialize graphics pipeline."""
         try:
-            fs_src = self.AA_FS_DERIVATIVES
             self._grc = RenderContext(
-                fs=fs_src, use_parent_modelview=True, use_parent_projection=True
+                fs=self.AA_FS_DERIVATIVES,
+                use_parent_modelview=True,
+                use_parent_projection=True,
             )
             self._grc["edge_scale"] = self._compute_edge_scale()
 
-            if self.enable_antialiasing:
-                self._texture = self._get_shared_texture()
-            else:
-                self._texture = None
+            self._texture = (
+                self._get_shared_texture() if self.enable_antialiasing else None
+            )
 
             with self._grc:
                 self._gcolor = Color(*self.color)
@@ -2451,27 +2754,31 @@ class OptimizedSmoothLinePlot(Plot):
             )
             return [self._grc] if self._grc else []
         except Exception as e:
-            Logger.error(f"OptimizedSmoothLinePlot: Failed to create drawings: {e}")
+            Logger.error(f"Failed to create drawings: {e}")
             return []
 
     def recreate_drawings(self):
+        """Rebuild graphics pipeline after configuration changes."""
         try:
             if self._grc:
                 self._grc.clear()
             self._drawings = self.create_drawings()
             self.force_refresh()
         except Exception as e:
-            Logger.warning(f"OptimizedSmoothLinePlot: recreate_drawings failed: {e}")
+            Logger.warning(f"recreate_drawings failed: {e}")
 
     def feed_point(self, x: float, y: float):
+        """Add new data point to plot."""
         self._ring.append((x, y))
         self.ask_draw()
 
     def update(self, xlog, xmin, xmax, ylog, ymin, ymax, size):
+        """Handle parameter updates."""
         super().update(xlog, xmin, xmax, ylog, ymin, ymax, size)
-        self._needs_clear = True  # clear only on param change
+        self._needs_clear = True
 
-    def iterate_points(self):
+    def iterate_points(self) -> Iterator[Tuple[float, float]]:
+        """Generate transformed plot coordinates."""
         if self._ring:
             x_px = self.x_px()
             y_px = self.y_px()
@@ -2481,11 +2788,11 @@ class OptimizedSmoothLinePlot(Plot):
             yield from super().iterate_points()
 
     def draw(self, *args):
+        """Main rendering entry point."""
         if self._is_drawing:
             return
         self._is_drawing = True
         try:
-            # Clear only when params changed to prevent flicker.
             if self._needs_clear:
                 self.dispatch("on_clear_plot")
                 self._needs_clear = False
@@ -2494,10 +2801,12 @@ class OptimizedSmoothLinePlot(Plot):
             self._is_drawing = False
 
     def _view_valid(self) -> bool:
+        """Check if viewport has valid dimensions."""
         x0, y0, x1, y1 = self.params.get("size", (0, 0, 0, 0))
         return (x1 - x0) > 1 and (y1 - y0) > 1
 
     def _draw_optimized(self):
+        """Efficiently render plot lines."""
         if not self._gline or not self._view_valid():
             return
 
@@ -2506,21 +2815,24 @@ class OptimizedSmoothLinePlot(Plot):
 
         ring_len = len(self._ring)
         ring_tail = self._ring[-1] if ring_len else None
+
+        # Skip redundant draws
         if ring_len == self._last_ring_len and ring_tail == self._last_ring_tail:
             return
 
         pts = list(self.iterate_points())
-        if len(pts) > self.max_points:
-            pts = pts[-int(self.max_points) :]
-
         n = min(len(pts), int(self.max_points))
+
         if n < 2:
             self._gline.points = []
         else:
+            # Reuse existing buffer when possible
             fp = self._flat_points
             need = 2 * n
             if len(fp) < need:
                 fp.extend([0.0] * (need - len(fp)))
+
+            # Flatten coordinate pairs
             for i in range(n):
                 fp[2 * i] = pts[i][0]
                 fp[2 * i + 1] = pts[i][1]
@@ -2534,40 +2846,47 @@ class OptimizedSmoothLinePlot(Plot):
             self._last_cleanup_time = now
 
     def _should_cleanup(self, current_time: float) -> bool:
+        """Determine if cleanup is needed."""
         return self.auto_cleanup and (
             current_time - self._last_cleanup_time > float(self.cleanup_interval)
         )
 
     def _cleanup_old_data(self):
+        """Reset buffers to reduce memory fragmentation."""
         self._flat_points = [0.0] * (2 * int(self.max_points))
         if self._ring.maxlen != int(self.max_points):
             self._ring = deque(self._ring, maxlen=int(self.max_points))
-        Logger.debug("OptimizedSmoothLinePlot: Cleanup completed")
+        Logger.debug("Cleanup completed")
 
     def _periodic_cleanup(self, dt):
+        """Scheduled cleanup handler."""
         try:
             now = Clock.get_time()
             if now - self._last_cleanup_time > self.cleanup_interval:
                 self._cleanup_old_data()
                 self._last_cleanup_time = now
         except Exception as e:
-            Logger.warning(f"OptimizedSmoothLinePlot: Periodic cleanup failed: {e}")
+            Logger.warning(f"Periodic cleanup failed: {e}")
 
     def on_line_width(self, _, value):
+        """Handle line width changes."""
         if self._gline:
             self._gline.width = value
         if self._grc and self.enable_antialiasing:
             self._grc["edge_scale"] = self._compute_edge_scale()
 
     def on_enable_antialiasing(self, _, __):
+        """Handle antialiasing toggle."""
         self.recreate_drawings()
 
     def on_max_points(self, _, value):
+        """Handle buffer size changes."""
         value = int(max(2, value))
         self._ring = deque(self._ring, maxlen=value)
         self._flat_points = [0.0] * (2 * value)
 
     def on_points(self, _, value):
+        """Handle bulk point updates."""
         try:
             if value:
                 self._ring = deque(
@@ -2579,23 +2898,27 @@ class OptimizedSmoothLinePlot(Plot):
             pass
 
     def on_color(self, _, value):
+        """Handle color changes."""
         if self._gcolor:
             self._gcolor.rgba = value
 
     def _compute_edge_scale(self) -> float:
+        """Calculate antialiasing edge scale factor."""
         lw = float(self.line_width)
         return max(0.5, min(3.0, 0.6 * lw))
 
     def create_legend_drawings(self) -> List:
+        """Create legend representation."""
         try:
             from kivy.garden.graph import LinePlot
 
             return LinePlot.create_legend_drawings(self)
         except Exception as e:
-            Logger.warning(f"OptimizedSmoothLinePlot: Legend creation failed: {e}")
+            Logger.warning(f"Legend creation failed: {e}")
             return []
 
     def draw_legend(self, center, maximum_size):
+        """Draw legend icon."""
         try:
             from kivy.garden.graph import LinePlot
 
@@ -2603,13 +2926,15 @@ class OptimizedSmoothLinePlot(Plot):
                 self.line_width = self._gline.width
             return LinePlot.draw_legend(self, center, maximum_size)
         except Exception as e:
-            Logger.warning(f"OptimizedSmoothLinePlot: Legend drawing failed: {e}")
+            Logger.warning(f"Legend drawing failed: {e}")
 
     def force_refresh(self):
+        """Trigger complete redraw."""
         self._flat_points = [0.0] * (2 * int(self.max_points))
         self.ask_draw()
 
     def __del__(self):
+        """Clean up resources."""
         try:
             Clock.unschedule(self._periodic_cleanup)
             self._release_shared_texture()
@@ -2625,24 +2950,58 @@ class AALineStripPlot(Plot):
     - GLES2/3 safe: fragment shader uses tex_coord0.y only (no derivatives/texture sampling).
     """
 
-    line_width = NumericProperty(2.0)    # dp (visual thickness)
-    feather_px = NumericProperty(1.25)   # AA softness in pixels
+    # line_width (display-independent pixels, dp)
+    # - Visual line thickness. Converted to screen pixels via kivy.metrics.dp.
+    # - Larger values make the strip thicker and proportionally expand the AA envelope.
+    # - Interacts with feather_px (edge softness width) and profile (edge steepness).
+    # - Typical: 1.5–4.0 dp for thin plots, 4–8 dp for thicker strokes.
+    line_width = NumericProperty(2.0)
+
+    # feather_px (screen pixels)
+    # - Width of the anti-aliasing fade at the outer edge (in px).
+    # - Higher feather_px = softer, more gradual edge (can look slightly blurrier).
+    # - Lower feather_px = crisper edge (may show more aliasing on diagonals).
+    # - Typical: 1.0–1.4 px for thin lines, 1.4–2.0 px for medium/thick lines.
+    # - Performance: negligible; affects only a small band near the edge in the fragment shader.
+    feather_px = NumericProperty(1.25)
+
+    # profile (unitless)
+    # - Shapes the edge alpha curve by raising it to this power (post-smootherstep).
+    # - >1.0 makes the transition steeper (sharper edge); <1.0 softens it (smoother edge).
+    # - Tune together with feather_px: feather sets width, profile sets steepness.
+    # - Recommended start: 1.05 (slightly crisper), adjust 0.95–1.15 as needed.
+    profile = NumericProperty(1.05)
+
+    # max_points (count)
+    # - Upper bound on the number of polyline points used to build the GPU strip per draw.
+    # - If points exceed this, only the last max_points are used (keeps recent data).
+    # - Larger values increase CPU work (joins/offsets) and GPU vertices (2 per point).
+    # - Practical ranges: 1,000–10,000. If your pipeline uses 16-bit indices, ensure 2*max_points < 65,535
+    #   (i.e., max_points < 32,768) to avoid index overflows.
     max_points = NumericProperty(4000)
 
     # Fragment shader: fade alpha within 'feather' pixels near the strip edge.
     FS = """
+    // glsl
     $HEADER$
     #ifdef GL_ES
     precision mediump float;
     #endif
-    uniform float half_width;
-    uniform float feather;
 
-    // Kivy passes each vertex as (x, y, u, v). We store signed distance in v:
-    // +half_width for left edge, -half_width for right edge.
+    uniform float half_width;   // px
+    uniform float feather;      // px (try 1.4..1.8)
+    uniform float profile;      // 0.8..1.3 (1.0 neutral, >1 slightly steeper)
+
+    float edge_alpha(float d){
+        // quintic smootherstep for gentler transition near edges
+        float t = clamp((half_width - d) / max(1e-6, feather), 0.0, 1.0);
+        t = t*t*t*(t*(t*6.0 - 15.0) + 10.0);
+        return pow(t, profile);
+    }
+
     void main(void){
-        float d = abs(tex_coord0.y);  // 0 at center, half_width at edge (in pixels)
-        float a = 1.0 - smoothstep(half_width - feather, half_width, d);
+        float d = abs(tex_coord0.y);        // signed distance carried in v
+        float a = edge_alpha(d);
         vec4 c = frag_color;
         c.a *= a;
         gl_FragColor = c;
@@ -2661,7 +3020,9 @@ class AALineStripPlot(Plot):
         self.fbind("feather_px", lambda *_: self.ask_draw())
         self.fbind(
             "color",
-            lambda *_: setattr(self._color, "rgba", self.color) if self._color else None,
+            lambda *_: (
+                setattr(self._color, "rgba", self.color) if self._color else None
+            ),
         )
 
     def create_drawings(self):
@@ -2680,19 +3041,17 @@ class AALineStripPlot(Plot):
             return []
 
     def draw(self, *args):
-        """Build a triangle strip: per point -> left/right vertices with v=±half_width."""
+        """Build a triangle strip with signed distance in v; bevel fallback for sharp joins."""
         super().draw(*args)
         if not self._mesh:
             return
 
         pts = list(self.iterate_points())
         if len(pts) < 2:
-            # Clear only vertices/indices; DO NOT touch tex_coords
             self._mesh.vertices = []
             self._mesh.indices = []
             return
 
-        # Limit points
         maxn = int(self.max_points)
         if len(pts) > maxn:
             pts = pts[-maxn:]
@@ -2722,58 +3081,74 @@ class AALineStripPlot(Plot):
             return -dy, dx
 
         # Segment directions and normals
+        dirs = []
         norms = []
         for i in range(n - 1):
             ux, uy = norm(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
             nx, ny = perp(ux, uy)
+            dirs.append((ux, uy))
             norms.append((nx, ny))
 
-        # Compute joined offsets with miter clamp
+        # Compute offsets with miter where reasonable, bevel fallback when too sharp
         left, right = [], []
         for i in range(n):
             px, py = pts[i]
             if i == 0:
                 nx, ny = norms[0]
-                ox, oy = nx * hw, ny * hw
+                oxL, oyL = nx * hw, ny * hw
+                oxR, oyR = -oxL, -oyL
             elif i == n - 1:
                 nx, ny = norms[-1]
-                ox, oy = nx * hw, ny * hw
+                oxL, oyL = nx * hw, ny * hw
+                oxR, oyR = -oxL, -oyL
             else:
                 n1 = norms[i - 1]
                 n2 = norms[i]
+                # miter attempt
                 bx, by = n1[0] + n2[0], n1[1] + n2[1]
                 bl = (bx * bx + by * by) ** 0.5
-                if bl <= 1e-6:
-                    bx, by = n2
-                    bl = (bx * bx + by * by) ** 0.5
-                bx, by = bx / bl, by / bl
-                dot = bx * n1[0] + by * n1[1]
-                scale = hw / max(1e-6, dot)
-                if scale > miter_limit:
-                    scale = miter_limit
-                ox, oy = bx * scale, by * scale
-            left.append((px + ox, py + oy))
-            right.append((px - ox, py - oy))
+                use_bevel = bl <= 1e-6
+                if not use_bevel:
+                    bx, by = bx / bl, by / bl
+                    dot = bx * n1[0] + by * n1[1]
+                    scale = hw / max(1e-6, dot)
+                    use_bevel = scale > miter_limit
 
-        # Build vertices with v = signed distance (±hw). u can be 0.0.
+                if not use_bevel:
+                    ox, oy = bx * scale, by * scale
+                    oxL, oyL = ox, oy
+                    oxR, oyR = -ox, -oy
+                else:
+                    # Determine turn direction (cross product of segment dirs)
+                    turn = dirs[i - 1][0] * dirs[i][1] - dirs[i - 1][1] * dirs[i][0]
+                    if turn > 0.0:  # left turn
+                        oxL, oyL = n2[0] * hw, n2[1] * hw  # outward on left
+                        oxR, oyR = -n1[0] * hw, -n1[1] * hw  # inward on right
+                    else:  # right turn
+                        oxL, oyL = n1[0] * hw, n1[1] * hw
+                        oxR, oyR = -n2[0] * hw, -n2[1] * hw
+
+            left.append((px + oxL, py + oyL))
+            right.append((px + oxR, py + oyR))
+
+        # Build vertices with v = signed distance (±hw); u is unused (0.0)
         verts = []
         for i in range(n):
             lx, ly = left[i]
             rx, ry = right[i]
-            verts.extend([lx, ly, 0.0, +hw])  # left vertex: v=+hw
-            verts.extend([rx, ry, 0.0, -hw])  # right vertex: v=-hw
-
-        indices = list(range(2 * n))
+            verts.extend([lx, ly, 0.0, +hw])  # left vertex: v = +hw
+            verts.extend([rx, ry, 0.0, -hw])  # right vertex: v = -hw
 
         self._mesh.vertices = verts
-        self._mesh.indices = indices
+        self._mesh.indices = list(range(2 * n))
 
-        # Update uniforms
+        # Update shader uniforms (including profile shaping)
         self._rc["half_width"] = hw
         self._rc["feather"] = float(self.feather_px)
+        self._rc["profile"] = float(self.profile)
 
 
-class OptimizedMeshStripPlot(Plot):
+class MeshStripPlot(Plot):
     """
     Thick polyline without gaps using Mesh(mode='triangle_strip'):
     - Computes per-vertex joined offsets (miter/bevel) to keep edges continuous.
