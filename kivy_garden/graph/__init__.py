@@ -80,13 +80,10 @@ __all__ = (
 )
 
 from collections import deque
-from decimal import Decimal
 from itertools import chain
 from math import log10, floor, ceil, sqrt
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
-import weakref
 
-from kivy import metrics
 from kivy.clock import Clock
 from kivy.event import EventDispatcher
 from kivy.graphics import (
@@ -101,6 +98,7 @@ from kivy.graphics import (
     SmoothLine,
 )
 from kivy.graphics.instructions import InstructionGroup, Instruction
+from kivy.graphics.opengl import glGetString, GL_EXTENSIONS
 from kivy.graphics.texture import Texture
 
 # from kivy.graphics.vertex_instructions import Line, SmoothLine, Ellipse
@@ -120,7 +118,6 @@ from kivy.properties import (
     ColorProperty,
     OptionProperty,
 )
-from kivy.utils import platform
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
@@ -2639,8 +2636,10 @@ class OptimizedSmoothLinePlot(Plot):
     _texture_refs: int = 0
 
     # Antialiasing fragment shader supporting multiple platforms
+    # Shader with fwidth
     AA_FS_DERIVATIVES = """
     $HEADER$
+
     #ifdef GL_ES
     precision mediump float;
     #endif
@@ -2657,6 +2656,22 @@ class OptimizedSmoothLinePlot(Plot):
         float a = smoothstep(0.0, edge_scale, t);
     #endif
 
+        gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
+    }
+    """
+    # Fallback shader
+    AA_FS_NO_DERIVATIVES = """
+    $HEADER$
+
+    #ifdef GL_ES
+    precision mediump float;
+    #endif
+
+    uniform float edge_scale;
+
+    void main(void) {
+        float t = texture2D(texture0, tex_coord0).r;
+        float a = smoothstep(0.0, edge_scale, t);
         gl_FragColor = frag_color * vec4(1.0, 1.0, 1.0, a);
     }
     """
@@ -2730,10 +2745,22 @@ class OptimizedSmoothLinePlot(Plot):
     def create_drawings(self) -> List:
         """Initialize graphics pipeline."""
         try:
+
+            # Check OpenGL state
+            extensions_str = glGetString(GL_EXTENSIONS).decode("utf-8")
+            extensions = extensions_str.split() if extensions_str else []
+
+            # Bestimme ob GL_OES_standard_derivatives verfügbar ist
+            has_derivatives = "GL_OES_standard_derivatives" in extensions
+
+            # Wähle den entsprechenden Shader
+            if has_derivatives and self.enable_antialiasing:
+                shader_source = self.AA_FS_DERIVATIVES
+            else:
+                shader_source = self.AA_FS_NO_DERIVATIVES
+
             self._grc = RenderContext(
-                fs=self.AA_FS_DERIVATIVES,
-                use_parent_modelview=True,
-                use_parent_projection=True,
+                fs=shader_source, use_parent_modelview=True, use_parent_projection=True
             )
             self._grc["edge_scale"] = self._compute_edge_scale()
 
